@@ -2,8 +2,12 @@
 #include "engine.h"
 
 typedef struct _CLI_OPTIONS {
-    SYSCALL_FLAVOR apiFlavor;
     INJECTION_CONTEXT ctx;
+
+    SYSCALL_FLAVOR allocFlavor;
+    SYSCALL_FLAVOR writeFlavor;
+    SYSCALL_FLAVOR protectFlavor;
+    SYSCALL_FLAVOR invokeFlavor;
 } CLI_OPTIONS;
 
 void print_usage(const char *app_name);

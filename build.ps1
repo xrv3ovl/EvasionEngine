@@ -110,12 +110,6 @@ if (-not (Test-Path $Binary)) {
     Write-OK "Binary ready: $Binary  ($sizeKB KB)"
 }
 
-# -- Optional run -----------------------------------------------------------
-if ($Run -and (Test-Path $Binary)) {
-    Write-Step "Launching $Binary ..."
-    & $Binary
-}
-
 Write-Host ""
 Write-OK "Done. Artifacts in: $BinDir\"
 Write-Host ""

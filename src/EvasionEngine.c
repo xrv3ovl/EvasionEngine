@@ -3,6 +3,11 @@
 #include "engine.h"
 #include "payload.h"
 #include "cli.h"
+#include "dispatch.h"
+#include "allocate.h"
+#include "write.h"
+#include "protect.h"
+#include "invoke.h"
 
 int main(int argc, char *argv[]) {
     CLI_OPTIONS opts;
@@ -12,18 +17,17 @@ int main(int argc, char *argv[]) {
     if (rc < 0) return -1;   // error
 
     INJECTION_ENGINE engine = {
-        .Allocate = DefaultAllocate,
-        .Write    = DefaultWrite,
-        .Protect  = DefaultProtect,
-        .Invoke   = DefaultInvoke
+        .Allocate = DispatchAllocate,
+        .Write    = DispatchWrite,
+        .Protect  = DispatchProtect,
+        .Invoke   = DispatchInvoke
     };
 
     printf("--- Executing Process Injection ---\n");
 
     BOOL spawnProcess = (opts.ctx.spawnPath != NULL);
 
-    if (EngineExecute(&engine, &opts.ctx, mockShellcode,
-                      opts.apiFlavor, PAGE_EXECUTE_READ)) {
+    if(EngineExecute(&engine, &opts.ctx, mockShellcode, PAGE_EXECUTE_READ)) {                    
 
         printf("[*] Pipeline execution complete.\n");
 

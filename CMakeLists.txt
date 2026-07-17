@@ -21,9 +21,14 @@ set(PROJECT_SOURCES
     src/peb-eat-utils.c
     src/ps-utils.c
     src/syscall-utils.c
-    src/utils.c    
-    src/engine.c
+    src/utils.c        
     src/cli.c
+    src/allocate.c
+    src/write.c
+    src/protect.c
+    src/invoke.c
+    src/dispatch.c
+    src/engine.c
     src/EvasionEngine.c
 )
 
