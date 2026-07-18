@@ -19,6 +19,9 @@ EXTERN sysAddrNtQueueApcThread:QWORD
 EXTERN wNtResumeThreadSSN:DWORD
 EXTERN sysAddrNtResumeThread:QWORD
 
+EXTERN wNtQueryVirtualMemorySSN:DWORD
+EXTERN sysAddrNtQueryVirtualMemory:QWORD
+
 .CODE ; Start the code section
 
 ; Procedure for the NtAllocateVirtualMemory syscall
@@ -68,5 +71,12 @@ IndirectSysNtResumeThread PROC
     mov eax, wNtResumeThreadSSN
     jmp QWORD PTR [sysAddrNtResumeThread]
 IndirectSysNtResumeThread ENDP
+
+; Similar procedures for NtQueryVirtualMemory syscalls
+IndirectSysNtQueryVirtualMemory PROC
+    mov r10, rcx
+    mov eax, wNtQueryVirtualMemorySSN
+    jmp QWORD PTR [sysAddrNtQueryVirtualMemory]
+IndirectSysNtQueryVirtualMemory ENDP
 
 END ; End of the module

@@ -16,11 +16,21 @@ int main(int argc, char *argv[]) {
     if (rc == 1) return 0;   // help printed
     if (rc < 0) return -1;   // error
 
+    // DEBUG BLOCK
+    printf("[DEBUG] After parse_cli:\n");
+    printf("  spawnPath     = %s\n", opts.ctx.spawnPath ? opts.ctx.spawnPath : "(null)");
+    printf("  targetPid     = %lu\n", opts.ctx.targetPid);
+    printf("  allocFlavor   = %d (%s)\n", opts.ctx.allocFlavor, flavorName(opts.ctx.allocFlavor));
+    printf("  writeFlavor   = %d (%s)\n", opts.ctx.writeFlavor, flavorName(opts.ctx.writeFlavor));
+    printf("  protectFlavor = %d (%s)\n", opts.ctx.protectFlavor, flavorName(opts.ctx.protectFlavor));
+    printf("  invokeFlavor  = %d (%s)\n", opts.ctx.invokeFlavor, flavorName(opts.ctx.invokeFlavor));
+
+    //  use default dispatch functions
     INJECTION_ENGINE engine = {
         .Allocate = DispatchAllocate,
         .Write    = DispatchWrite,
         .Protect  = DispatchProtect,
-        .Invoke   = DispatchInvoke
+        .Invoke   = DispatchInvoke,
     };
 
     printf("--- Executing Process Injection ---\n");

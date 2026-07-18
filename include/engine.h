@@ -5,6 +5,32 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
+#ifndef NtCurrentProcess
+#define NtCurrentProcess() ((HANDLE)(LONG_PTR)-1)
+#endif
+
+// added to support NtQueryVirtualMemory
+// https://ntdoc.m417z.com/memory_information_class
+typedef enum _MEMORY_INFORMATION_CLASS
+{
+    MemoryBasicInformation,                     // q: MEMORY_BASIC_INFORMATION
+    MemoryWorkingSetInformation,                // q: MEMORY_WORKING_SET_INFORMATION
+    MemoryMappedFilenameInformation,            // q: UNICODE_STRING
+    MemoryRegionInformation,                    // q: MEMORY_REGION_INFORMATION/MEMORY_REGION_INFORMATION_EX
+    MemoryWorkingSetExInformation,              // q: MEMORY_WORKING_SET_EX_INFORMATION // since VISTA
+    MemorySharedCommitInformation,              // q: MEMORY_SHARED_COMMIT_INFORMATION // since WIN8
+    MemoryImageInformation,                     // q: MEMORY_IMAGE_INFORMATION
+    MemoryRegionInformationEx,                  // q: MEMORY_REGION_INFORMATION/MEMORY_REGION_INFORMATION_EX
+    MemoryPrivilegedBasicInformation,           // q: MEMORY_BASIC_INFORMATION
+    MemoryEnclaveImageInformation,              // q: MEMORY_ENCLAVE_IMAGE_INFORMATION // since REDSTONE3
+    MemoryBasicInformationCapped,               // q: MEMORY_BASIC_INFORMATION
+    MemoryPhysicalContiguityInformation,        // q: MEMORY_PHYSICAL_CONTIGUITY_INFORMATION // since 20H1
+    MemoryBadInformation,                       // q: MEMORY_BAD_INFORMATION[] // since WIN11
+    MemoryBadInformationAllProcesses,           // qs: not implemented // since 22H1
+    MemoryImageExtensionInformation,            // q: MEMORY_IMAGE_EXTENSION_INFORMATION // since 24H2
+    MaxMemoryInfoClass
+} MEMORY_INFORMATION_CLASS;
+
 typedef LONG NTSTATUS;
 
 typedef enum _SYSCALL_FLAVOR {
@@ -23,7 +49,6 @@ typedef enum _PITECHNIQUE {
 typedef enum _EBMETHOD {
     QUEUEAPC
 } EBMETHOD;
-
 
 typedef struct _INJECTION_CONTEXT {
     BOOL   spawnTarget;
@@ -220,6 +245,16 @@ NTSTATUS SysNtWaitForSingleObject(
     HANDLE Handle,          
     BOOLEAN Alertable,      
     PLARGE_INTEGER Timeout  
+);
+
+// https://ntdoc.m417z.com/ntqueryvirtualmemory
+NTSTATUS SysNtQueryVirtualMemory(
+    HANDLE ProcessHandle,
+    PVOID BaseAddress,
+    MEMORY_INFORMATION_CLASS MemoryInformationClass,
+    PVOID MemoryInformation,
+    SIZE_T MemoryInformationLength,
+    PSIZE_T ReturnLength
 );
 
 #ifdef __cplusplus

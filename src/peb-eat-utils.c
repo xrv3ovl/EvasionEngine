@@ -131,7 +131,7 @@ PVOID GetProcAddressManualGeneric(HANDLE hProcess, PVOID moduleBase, const char*
         PVOID nameAddress = (BYTE*)moduleBase + nameTable[mid];
         ReadMemoryInternal(hProcess, nameAddress, currentName, sizeof(currentName) - 1);
 
-        int cmp = strcmp(functionName, currentName);
+        int cmp = my_strcmp(functionName, currentName);
         if (cmp == 0) {
             WORD ordinalValue = ordinalTable[mid];
             DWORD funcRVA = 0;

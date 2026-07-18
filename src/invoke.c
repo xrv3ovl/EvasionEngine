@@ -4,6 +4,7 @@
 
 BOOL Win32Invoke(PINJECTION_CONTEXT ctx)
 {
+    printf("[*] Using Win32 API to invoke CreateRemoteThread.\n");
     HANDLE hThread = CreateRemoteThread(ctx->hProcess,
                                         NULL,
                                         0,
@@ -21,6 +22,7 @@ BOOL DFRInvoke(PINJECTION_CONTEXT ctx)
     if (!g_CreateRemoteThread)
         return FALSE;
 
+    printf("[*] Using DFR to invoke CreateRemoteThread.\n");
     HANDLE hThread = g_CreateRemoteThread(ctx->hProcess,
                                           NULL,
                                           0,
@@ -35,6 +37,7 @@ BOOL DFRInvoke(PINJECTION_CONTEXT ctx)
 
 BOOL DirectInvoke(PINJECTION_CONTEXT ctx)
 {
+    printf("[*] Using direct syscalls to invoke tCreateThreadEx.\n");
     NTSTATUS status = SysNtCreateThreadEx(&ctx->hThread,
                                           GENERIC_EXECUTE,
                                           NULL,
@@ -52,6 +55,7 @@ BOOL DirectInvoke(PINJECTION_CONTEXT ctx)
 
 BOOL IndirectInvoke(PINJECTION_CONTEXT ctx)
 {
+    printf("[*] Using indirect syscalls to invoke tCreateThreadEx.\n");
     NTSTATUS status = IndirectSysNtCreateThreadEx(&ctx->hThread,
                                                   GENERIC_EXECUTE,
                                                   NULL,

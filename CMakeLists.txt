@@ -18,10 +18,10 @@ endif()
 
 # Core C sources
 set(PROJECT_SOURCES
+    src/utils.c    
     src/peb-eat-utils.c
     src/ps-utils.c
-    src/syscall-utils.c
-    src/utils.c        
+    src/syscall-utils.c        
     src/cli.c
     src/allocate.c
     src/write.c
