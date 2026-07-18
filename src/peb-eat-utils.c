@@ -75,7 +75,7 @@ PVOID GetModuleBaseManualGeneric(HANDLE hProcess, PVOID pebAddr, const char* tar
             if (ReadMemoryInternal(hProcess, moduleEntry.BaseDllName.Buffer, localNameBuffer, moduleEntry.BaseDllName.Length)) {
                 localNameBuffer[moduleEntry.BaseDllName.Length / sizeof(WCHAR)] = L'\0';
 
-                if (_wcsicmp(localNameBuffer, targetNameWide) == 0) {
+                if (my_wcsicmp(localNameBuffer, targetNameWide) == 0) {
                     return moduleEntry.DllBase;
                 }
             }
