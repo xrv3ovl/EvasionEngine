@@ -17,10 +17,10 @@ EvasionEngine is a research-grade injection framework built around a **four-stag
 
 | # | Flavor | Mechanism |
 |---|---|---|
-| 1 | `WIN32` | Standard Win32 API (`VirtualAllocEx`, `WriteProcessMemory`, `CreateRemoteThread`, …) |
-| 2 | `DFR` | Dynamic Function Resolution — manual EAT walk of `kernel32` via PEB, no `GetProcAddress` |
-| 3 | `DIRECT` | Direct syscalls — hand-rolled x64 ASM stubs (`SysNt*`) that jump straight to the kernel |
-| 4 | `INDIRECT` | Indirect syscalls — SSN harvested from the PEB; trampoline through a legitimate `syscall` gadget in `ntdll` |
+| 0 | `WIN32` | Standard Win32 API (`VirtualAllocEx`, `WriteProcessMemory`, `CreateRemoteThread`, …) |
+| 1 | `DFR` | Dynamic Function Resolution — manual EAT walk of `kernel32` via PEB, no `GetProcAddress` |
+| 2 | `DIRECT` | Direct syscalls — hand-rolled x64 ASM stubs (`SysNt*`) that jump straight to the kernel |
+| 3 | `INDIRECT` | Indirect syscalls — SSN harvested from the PEB; trampoline through a legitimate `syscall` gadget in `ntdll` |
 
 Mix and match flavors across stages to test exactly which combination triggers a given sensor.
 
