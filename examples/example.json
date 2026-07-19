@@ -1,9 +1,55 @@
 [
-    {
-        "src_filename": "loader.exe",
-        "src_dir": "C:\\dev\\EvasionEngine\\bin\\Release",
-        "dst_filename": "test.exe",
-        "dst_dir": "C:\\dev",
-        "parameters": "-p 17112 -a 3"
-    }
+  {
+    "name": "Basic Engine Test",
+    "staging": [
+      {
+        "type": "copy",
+        "src_dir": "..\\bin\\Release",
+        "src_filename": "EvasionEngine.exe",
+        "dst_dir": "C:\\qa\\engine-test",
+        "dst_filename": "engine.exe"
+      }
+    ],
+    "parameters": ""
+  },
+  {
+    "name": "Basic Engine Test + Custom Payload",
+    "staging": [
+      {
+        "type": "copy",
+        "src_dir": "..\\bin\\Release",
+        "src_filename": "EvasionEngine.exe",
+        "dst_dir": "C:\\qa\\engine-test",
+        "dst_filename": "engine.exe"
+      },
+      {
+        "type": "copy",
+        "src_dir": "c:\\payloads",
+        "src_filename": "beacon_x64.bin",
+        "dst_dir": "C:\\qa\\engine-test",
+        "dst_filename": "beacon_x64.bin"
+      }      
+    ],
+    "parameters": "-f C:\\qa\\engine-test\\beacon_x64.bin"
+  },
+  {
+    "name": "Basic Engine Test + Custom Payload + Spawn Notepad with PPID Spoofing",
+    "staging": [
+      {
+        "type": "copy",
+        "src_dir": "..\\bin\\Release",
+        "src_filename": "EvasionEngine.exe",
+        "dst_dir": "C:\\qa\\engine-test",
+        "dst_filename": "engine.exe"
+      },
+      {
+        "type": "copy",
+        "src_dir": "c:\\payloads",
+        "src_filename": "beacon_x64.bin",
+        "dst_dir": "C:\\qa\\engine-test",
+        "dst_filename": "beacon_x64.bin"
+      }      
+    ],
+    "parameters": "-s c:\\windows\\system32\\notepad.exe -f C:\\qa\\engine-test\\beacon_x64.bin"
+  }  
 ]

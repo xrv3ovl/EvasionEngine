@@ -202,10 +202,10 @@ EvasionEngine.exe --pid 4567 `
 
 ## Test Harness
 
-`tools/test-harness.py` automates campaign execution, driving the engine through a matrix of flavor combinations defined in a JSON configuration file.
+`tools/test-harness.ps1` automates campaign execution, driving the engine through a matrix of flavor combinations defined in a JSON configuration file.
 
-```bash
-python tools/test-harness.py --input examples/example.json
+```powershell
+tools/test-harness.ps1 -InputFile examples/example.json
 ```
 
 See `examples/example.json` for the configuration schema.
