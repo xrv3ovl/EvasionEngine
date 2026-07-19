@@ -37,7 +37,7 @@ int main(int argc, char *argv[]) {
 
     BOOL spawnProcess = (opts.ctx.spawnPath != NULL);
 
-    if(EngineExecute(&engine, &opts.ctx, mockShellcode, PAGE_EXECUTE_READ)) {                    
+    if(EngineExecute(&engine, &opts.ctx, opts.ctx.payload, PAGE_EXECUTE_READ)) {                    
 
         printf("[*] Pipeline execution complete.\n");
 

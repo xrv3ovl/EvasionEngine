@@ -8,6 +8,9 @@ typedef struct _CLI_OPTIONS {
     SYSCALL_FLAVOR writeFlavor;
     SYSCALL_FLAVOR protectFlavor;
     SYSCALL_FLAVOR invokeFlavor;
+    
+    unsigned char *payload;
+    size_t payloadSize;    
 } CLI_OPTIONS;
 
 void print_usage(const char *app_name);

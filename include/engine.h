@@ -57,6 +57,7 @@ typedef struct _INJECTION_CONTEXT {
     HANDLE hProcess;
     HANDLE hThread;
     PVOID  pRemoteAddress;
+    unsigned char*  payload;
     SIZE_T payloadSize;
     BOOL   enableStomping;
     char*  targetModule;
@@ -283,14 +284,36 @@ typedef INJECTION_ENGINE* PINJECTION_ENGINE;
 
 // engine declarations
 //BOOL InitializeResolvers(SYSCALL_FLAVOR flavor);
-BOOL InitializeResolvers(PINJECTION_CONTEXT ctx);
-BOOL DefaultAllocate(PINJECTION_CONTEXT ctx, DWORD protect, SYSCALL_FLAVOR flavor);
-BOOL DefaultWrite(PINJECTION_CONTEXT ctx, LPCVOID pPayload, SYSCALL_FLAVOR flavor);
-BOOL DefaultProtect(PINJECTION_CONTEXT ctx, DWORD targetProtect, PDWORD pOldProtect, SYSCALL_FLAVOR flavor);
-BOOL DefaultInvoke(PINJECTION_CONTEXT ctx,  SYSCALL_FLAVOR flavor);
+BOOL InitializeResolvers(
+    PINJECTION_CONTEXT ctx
+);
+
+BOOL DefaultAllocate(
+    PINJECTION_CONTEXT ctx, 
+    DWORD protect, 
+    SYSCALL_FLAVOR flavor
+);
+
+BOOL DefaultWrite(
+    PINJECTION_CONTEXT ctx, 
+    LPCVOID pPayload, 
+    SYSCALL_FLAVOR flavor
+);
+
+BOOL DefaultProtect(
+    PINJECTION_CONTEXT ctx, 
+    DWORD targetProtect, 
+    PDWORD pOldProtect, 
+    SYSCALL_FLAVOR flavor
+);
+
+BOOL DefaultInvoke(PINJECTION_CONTEXT ctx,  
+    SYSCALL_FLAVOR flavor);
+
 //BOOL EngineExecute(PINJECTION_ENGINE engine, PINJECTION_CONTEXT ctx, LPCVOID pPayload, SYSCALL_FLAVOR flavor, DWORD finalProtect);
 BOOL EngineExecute(PINJECTION_ENGINE engine,
                    PINJECTION_CONTEXT ctx,
                    LPCVOID pPayload,
                    DWORD finalProtect);
+
 char* flavorName(SYSCALL_FLAVOR f);

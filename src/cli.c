@@ -27,6 +27,7 @@ void print_usage(const char *app_name)
     printf("  -h, --help                     Show this help message\n");
     printf("  -p, --pid <pid>                Target PID\n");
     printf("  -s, --spawn <path>             Spawn target process\n");
+    printf("  -f, --file <path>              Load payload from file\n");
     printf("  --alloc-flavor <0-3>           Allocation flavor\n");
     printf("  --write-flavor <0-3>           Write flavor\n");
     printf("  --protect-flavor <0-3>         Protection flavor\n");
@@ -47,7 +48,8 @@ int parse_cli(int argc, char **argv, CLI_OPTIONS *opts)
     opts->protectFlavor = FLAVOR_WIN32;
     opts->invokeFlavor  = FLAVOR_WIN32;
 
-    opts->ctx.payloadSize = sizeof(mockShellcode);
+    // defaults
+    opts->ctx.payloadSize = mockShellcodeSize;
     opts->ctx.technique   = DEFAULT;
 
     printf("--- Processing Arguments ---\n");
@@ -138,12 +140,53 @@ int parse_cli(int argc, char **argv, CLI_OPTIONS *opts)
             printf("[*] targetOffset = %lu\n", (unsigned long)opts->ctx.targetOffset);
         }
 
+        else if (!my_strcmp(arg, "-f") || !my_strcmp(arg, "--file")) {
+            FETCH_OPTARG();
+
+            FILE *fp = fopen(optarg, "rb");
+            if (!fp) {
+                fprintf(stderr, "[ERROR] Failed to open input file: %s\n", optarg);
+                return -1;
+            }
+
+            fseek(fp, 0, SEEK_END);
+            long sz = ftell(fp);
+            fseek(fp, 0, SEEK_SET);
+
+            unsigned char *buf = malloc(sz);
+            if (!buf) {
+                fprintf(stderr, "[ERROR] malloc failed for payload buffer\n");
+                fclose(fp);
+                return -1;
+            }
+
+            if (fread(buf, 1, sz, fp) != (size_t)sz) {
+                fprintf(stderr, "[ERROR] Failed to read entire file: %s\n", optarg);
+                free(buf);
+                fclose(fp);
+                return -1;
+            }
+
+            fclose(fp);
+
+            opts->ctx.payload      = buf;
+            opts->ctx.payloadSize  = sz;
+
+            printf("[*] Loaded payload from %s (%ld bytes)\n", optarg, sz);
+        }
+
         else {
             fprintf(stderr, "[ERROR] Unknown parameter: %s\n", arg);
             return -1;
         }
 
         #undef FETCH_OPTARG
+    }
+
+    if (!opts->ctx.payload) {
+        opts->ctx.payload = mockShellcode;
+        opts->ctx.payloadSize = mockShellcodeSize;
+        printf("[*] Using baked in shellcode (%zu bytes)\n", opts->ctx.payloadSize);
     }
 
     return 0;

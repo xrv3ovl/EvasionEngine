@@ -36,6 +36,7 @@ DWORD GetSSNByName(PPEB peb, const char* funcName) {
     if (!peb || !funcName) return 0;
 
     // Avoid the .rdata string literal trap by building the string on the stack
+    // todo: replace this with hashing
     char ntName[] = { 'n', 't', 'd', 'l', 'l', '.', 'd', 'l', 'l', 0 };
 
     // Locate ntdll base manually from the PEB

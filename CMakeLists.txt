@@ -21,7 +21,8 @@ set(PROJECT_SOURCES
     src/utils.c    
     src/peb-eat-utils.c
     src/ps-utils.c
-    src/syscall-utils.c        
+    src/syscall-utils.c  
+    src/payload.c 
     src/cli.c
     src/allocate.c
     src/write.c
