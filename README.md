@@ -1,6 +1,9 @@
 # EvasionEngine
 
-> A modular C toolkit for testing and benchmarking Windows Process Injection (WPI) techniques — with independently configurable syscall flavors across every stage of the injection pipeline.
+<p align="center">
+    <img width="530" src="assets/EvasionEngine.png">
+</p>
+A modular C toolkit for testing and benchmarking Windows Process Injection (WPI) techniques — with independently configurable syscall flavors across every stage of the injection pipeline.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Language: C](https://img.shields.io/badge/language-C-00599C?logo=c)

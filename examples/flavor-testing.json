@@ -1,0 +1,80 @@
+[
+  {
+    "name": "Baseline - All Win32 API",
+    "staging": [
+      {
+        "type": "copy",
+        "src_dir": "..\\bin\\Release",
+        "src_filename": "EvasionEngine.exe",
+        "dst_dir": "C:\\qa\\engine-test",
+        "dst_filename": "engine.exe"
+      }
+    ],
+    "parameters": "--alloc-flavor 0 --write-flavor 0 --protect-flavor 0 --invoke-flavor 0"
+  },
+  {
+    "name": "Pure DFR (Dynamic Function Resolution)",
+    "staging": [
+      {
+        "type": "copy",
+        "src_dir": "..\\bin\\Release",
+        "src_filename": "EvasionEngine.exe",
+        "dst_dir": "C:\\qa\\engine-test",
+        "dst_filename": "engine.exe"
+      }
+    ],
+    "parameters": "--alloc-flavor 1 --write-flavor 1 --protect-flavor 1 --invoke-flavor 1"
+  },
+  {
+    "name": "Pure Direct Syscalls",
+    "staging": [
+      {
+        "type": "copy",
+        "src_dir": "..\\bin\\Release",
+        "src_filename": "EvasionEngine.exe",
+        "dst_dir": "C:\\qa\\engine-test",
+        "dst_filename": "engine.exe"
+      }
+    ],
+    "parameters": "--alloc-flavor 2 --write-flavor 2 --protect-flavor 2 --invoke-flavor 2"
+  },
+  {
+    "name": "Pure Indirect Syscalls (Trampoline)",
+    "staging": [
+      {
+        "type": "copy",
+        "src_dir": "..\\bin\\Release",
+        "src_filename": "EvasionEngine.exe",
+        "dst_dir": "C:\\qa\\engine-test",
+        "dst_filename": "engine.exe"
+      }
+    ],
+    "parameters": "--alloc-flavor 3 --write-flavor 3 --protect-flavor 3 --invoke-flavor 3"
+  },
+  {
+    "name": "Mixed-Mode Pipeline (DFR + Direct + Indirect)",
+    "staging": [
+      {
+        "type": "copy",
+        "src_dir": "..\\bin\\Release",
+        "src_filename": "EvasionEngine.exe",
+        "dst_dir": "C:\\qa\\engine-test",
+        "dst_filename": "engine.exe"
+      }
+    ],
+    "parameters": "--alloc-flavor 1 --write-flavor 2 --protect-flavor 1 --invoke-flavor 3"
+  },
+  {
+    "name": "Indirect Syscalls with Spawn & PPID Spoofing",
+    "staging": [
+      {
+        "type": "copy",
+        "src_dir": "..\\bin\\Release",
+        "src_filename": "EvasionEngine.exe",
+        "dst_dir": "C:\\qa\\engine-test",
+        "dst_filename": "engine.exe"
+      }
+    ],
+    "parameters": "--spawn \"C:\\Windows\\System32\\notepad.exe\" --alloc-flavor 3 --write-flavor 3 --protect-flavor 3 --invoke-flavor 3"
+  }
+]

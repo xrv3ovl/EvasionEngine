@@ -1,0 +1,54 @@
+[
+  {
+    "name": "Research Case - Evasion-Free Alloc (Win32 to Indirect Transition)",
+    "staging": [
+      {
+        "type": "copy",
+        "src_dir": "..\\bin\\Release",
+        "src_filename": "EvasionEngine.exe",
+        "dst_dir": "C:\\qa\\engine-test",
+        "dst_filename": "engine.exe"
+      }
+    ],
+    "parameters": "--alloc-flavor 0 --write-flavor 3 --protect-flavor 3 --invoke-flavor 3"
+  },
+  {
+    "name": "Research Case - Private Page Cloaking (Direct Alloc/Protect + Win32 Write)",
+    "staging": [
+      {
+        "type": "copy",
+        "src_dir": "..\\bin\\Release",
+        "src_filename": "EvasionEngine.exe",
+        "dst_dir": "C:\\qa\\engine-test",
+        "dst_filename": "engine.exe"
+      }
+    ],
+    "parameters": "--alloc-flavor 2 --write-flavor 0 --protect-flavor 2 --invoke-flavor 0"
+  },
+  {
+    "name": "Research Case - Un-Hooked Permission Flip (DFR + Indirect Protect Focus)",
+    "staging": [
+      {
+        "type": "copy",
+        "src_dir": "..\\bin\\Release",
+        "src_filename": "EvasionEngine.exe",
+        "dst_dir": "C:\\qa\\engine-test",
+        "dst_filename": "engine.exe"
+      }
+    ],
+    "parameters": "--alloc-flavor 1 --write-flavor 1 --protect-flavor 3 --invoke-flavor 1"
+  },
+  {
+    "name": "Research Case - Stealth Execution (Direct Prep + Indirect Thread Invoke)",
+    "staging": [
+      {
+        "type": "copy",
+        "src_dir": "..\\bin\\Release",
+        "src_filename": "EvasionEngine.exe",
+        "dst_dir": "C:\\qa\\engine-test",
+        "dst_filename": "engine.exe"
+      }
+    ],
+    "parameters": "--alloc-flavor 2 --write-flavor 2 --protect-flavor 2 --invoke-flavor 3"
+  }
+]
