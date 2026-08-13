@@ -91,3 +91,6 @@ BOOL GetRemoteModuleSection(HANDLE hProcess, PVOID moduleBase, const char* secti
 
 // Export/Text Section Utilities
 PVOID FindFirstExportInTextSectionGeneric(HANDLE hProcess, PVOID moduleBase);
+
+BOOL GetPEHeaders(HANDLE hProcess, PVOID moduleBase, IMAGE_DOS_HEADER* outDos, IMAGE_NT_HEADERS* outNt);
+BOOL ReadMemoryInternal(HANDLE hProcess, PVOID baseAddress, PVOID localBuffer, SIZE_T size);

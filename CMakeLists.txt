@@ -31,6 +31,12 @@ set(PROJECT_SOURCES
     src/dispatch.c
     src/engine.c
     src/EvasionEngine.c
+    src/hash_loader.c
+    src/hashed_values.c
+    HashIt/src/hashit.c
+    HashIt/src/hash_functions.c
+    MaskIt/src/maskit.c
+    MaskIt/src/masking_functions.c
 )
 
 # Build BOTH ASM files
@@ -54,7 +60,7 @@ add_executable(EvasionEngine
 )
 
 # Include paths
-target_include_directories(EvasionEngine PRIVATE include)
+target_include_directories(EvasionEngine PRIVATE include HashIt/include MaskIt/include)
 
 # MSVC flags (C only)
 if(MSVC)

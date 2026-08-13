@@ -1,7 +1,10 @@
-#include "peb-eat-utils.h"
-#include "utils.h"
 #include <stddef.h>
 #include <stdio.h>
+
+#include "peb-eat-utils.h"
+#include "utils.h"
+#include "hash_loader.h"
+#include "hashed_values.h"
 
 #define LOCAL_PROCESS_HANDLE ((HANDLE)(LONG_PTR)-1)
 
@@ -171,14 +174,25 @@ PVOID GetPebAddressGeneric(HANDLE hProcess) {
     localPeb = (PVOID)__readfsdword(0x30);
 #endif
 
-    PVOID localNtdllBase = GetModuleBaseManualGeneric(LOCAL_PROCESS_HANDLE, localPeb, "ntdll.dll");
+    /*PVOID localNtdllBase = GetModuleBaseManualGeneric(LOCAL_PROCESS_HANDLE, localPeb, "ntdll.dll");
+    if (!localNtdllBase) return NULL;*/
+    PVOID localNtdllBase =
+        GetModuleBaseManualHV(
+            LOCAL_PROCESS_HANDLE,
+            localPeb,
+            &hv_ntdll
+        );
     if (!localNtdllBase) return NULL;
 
-    pNtQueryInformationProcess CustomNtQueryInfoProcess = (pNtQueryInformationProcess)GetProcAddressManualGeneric(
+    /*pNtQueryInformationProcess CustomNtQueryInfoProcess = (pNtQueryInformationProcess)GetProcAddressManualGeneric(
         LOCAL_PROCESS_HANDLE, 
         localNtdllBase, 
         "NtQueryInformationProcess", 
         0
+    );*/
+    pNtQueryInformationProcess CustomNtQueryInfoProcess = (pNtQueryInformationProcess)GPAManualByHash(
+        localNtdllBase, 
+        hv_NtQueryInformationProcess
     );
     if (!CustomNtQueryInfoProcess) return NULL;
 
