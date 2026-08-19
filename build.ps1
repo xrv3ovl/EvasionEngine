@@ -109,7 +109,3 @@ if (-not (Test-Path $Binary)) {
     $sizeKB = [math]::Round((Get-Item $Binary).Length / 1024, 1)
     Write-OK "Binary ready: $Binary  ($sizeKB KB)"
 }
-
-Write-Host ""
-Write-OK "Done. Artifacts in: $BinDir\"
-Write-Host ""

@@ -11,6 +11,9 @@ typedef struct _CLI_OPTIONS {
     
     unsigned char *payload;
     size_t payloadSize;    
+
+    BOOL spoofCallstack;
+    CSTECHNIQUE csTechnique;
 } CLI_OPTIONS;
 
 void print_usage(const char *app_name);

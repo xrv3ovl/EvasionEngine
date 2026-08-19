@@ -7,6 +7,8 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/bin")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_CURRENT_SOURCE_DIR}/bin")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_CURRENT_SOURCE_DIR}/bin")
 
 # Enable MASM only on x64
 if(CMAKE_SIZEOF_VOID_P EQUAL 8)
@@ -37,6 +39,7 @@ set(PROJECT_SOURCES
     HashIt/src/hash_functions.c
     MaskIt/src/maskit.c
     MaskIt/src/masking_functions.c
+    src/unwindraven_integration.c
 )
 
 # Build BOTH ASM files
@@ -53,14 +56,35 @@ if(IS_X64)
     endforeach()
 endif()
 
+add_library(unwindraven_core STATIC
+    UnwindRaven/src/common.c
+    UnwindRaven/src/pe_loader.c
+    UnwindRaven/src/stack_blueprint.c
+    UnwindRaven/src/synthetic_stack.c
+    UnwindRaven/src/unwindraven_core.c
+    UnwindRaven/src/veh.c
+)
+
+target_include_directories(unwindraven_core PUBLIC UnwindRaven/include include)
+
+target_link_libraries(unwindraven_core PUBLIC
+    dbghelp
+    psapi
+    advapi32
+    user32
+    kernel32
+)
+
 # Define target (ASM must be included here)
 add_executable(EvasionEngine
     ${PROJECT_SOURCES}
     $<$<BOOL:${IS_X64}>:${ASM_SOURCES}>
 )
 
+target_link_libraries(EvasionEngine PRIVATE unwindraven_core)
+
 # Include paths
-target_include_directories(EvasionEngine PRIVATE include HashIt/include MaskIt/include)
+target_include_directories(EvasionEngine PRIVATE include HashIt/include MaskIt/include UnwindRaven/include LacunaChain)
 
 # MSVC flags (C only)
 if(MSVC)

@@ -4,6 +4,30 @@
 #include "protect.h"
 #include "invoke.h"
 
+#include "unwindraven_integration.h"
+
+static DWORD WINAPI SpoofedInvokeThunk(LPVOID param)
+{
+    PINJECTION_CONTEXT ctx = (PINJECTION_CONTEXT)param;
+    DispatchInvoke(ctx);   // respects ctx->invokeFlavor
+    return 0;
+}
+
+BOOL EngineInvoke(PINJECTION_CONTEXT ctx)
+{
+    if (!ctx->spoofCallstack)
+        return DispatchInvoke(ctx);
+
+    switch (ctx->csTechnique)
+    {
+        case UNWIND_RAVEN:
+            return SpoofedInvoke_UnwindRaven(ctx);
+
+        default:
+            return DispatchInvoke(ctx);
+    }
+}
+
 BOOL DispatchAllocate(PINJECTION_CONTEXT ctx, DWORD protect)
 {
     switch (ctx->allocFlavor)

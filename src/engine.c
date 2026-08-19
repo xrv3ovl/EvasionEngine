@@ -7,6 +7,8 @@
 #include "hash_loader.h"
 #include "hashed_values.h"
 
+#include "unwindraven_integration.h"
+
 #include <stdio.h>
 
 #define LOCAL_PROCESS_HANDLE ((HANDLE)(LONG_PTR)-1)

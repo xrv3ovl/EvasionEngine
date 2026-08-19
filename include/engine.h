@@ -50,6 +50,10 @@ typedef enum _EBMETHOD {
     QUEUEAPC
 } EBMETHOD;
 
+typedef enum _CSTECHNIQUE {
+    UNWIND_RAVEN
+} CSTECHNIQUE;
+
 typedef struct _INJECTION_CONTEXT {
     BOOL   spawnTarget;
     char*  spawnPath;
@@ -59,12 +63,19 @@ typedef struct _INJECTION_CONTEXT {
     PVOID  pRemoteAddress;
     unsigned char*  payload;
     SIZE_T payloadSize;
+
+    // module stomping
     BOOL   enableStomping;
     char*  targetModule;
     char*  targetExport;
     DWORD  targetOffset;
-    PITECHNIQUE technique;
 
+    // tradecraft flags
+    PITECHNIQUE technique;
+    BOOL spoofCallstack;
+    CSTECHNIQUE csTechnique;
+
+    // per-stage behavior controls
     SYSCALL_FLAVOR allocFlavor;
     SYSCALL_FLAVOR writeFlavor;
     SYSCALL_FLAVOR protectFlavor;

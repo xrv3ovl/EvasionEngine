@@ -52,6 +52,11 @@ int parse_cli(int argc, char **argv, CLI_OPTIONS *opts)
     opts->ctx.payloadSize = mockShellcodeSize;
     opts->ctx.technique   = DEFAULT;
 
+    // no callstack spoofing
+    opts->spoofCallstack = FALSE;
+    // default cs spoofing technique in case
+    opts->csTechnique = UNWIND_RAVEN;
+
     printf("--- Processing Arguments ---\n");
 
     for (int i = 1; i < argc; i++)
@@ -138,6 +143,33 @@ int parse_cli(int argc, char **argv, CLI_OPTIONS *opts)
             opts->ctx.targetOffset = strtoul(optarg, NULL, 16);
             opts->ctx.enableStomping = TRUE;
             printf("[*] targetOffset = %lu\n", (unsigned long)opts->ctx.targetOffset);
+        }
+
+        else if (!my_strcmp(arg, "--spoof-callstack")) {
+            opts->ctx.spoofCallstack = TRUE;
+            printf("[*] spoofCallstack = TRUE\n");
+        }
+
+        else if (!my_strcmp(arg, "--cs-technique")) {
+            FETCH_OPTARG();
+
+            int tech = strtol(optarg, NULL, 0);
+
+            switch (tech) {
+                case 0:
+                    opts->ctx.csTechnique = UNWIND_RAVEN;
+                    printf("[*] csTechnique = UNWIND_RAVEN\n");
+                    break;
+
+                case 1:
+                    opts->ctx.csTechnique = LACUNA_CHAIN;
+                    printf("[*] csTechnique = LACUNA_CHAIN\n");
+                    break;
+
+                default:
+                    fprintf(stderr, "[ERROR] Invalid cs-technique '%s'. Must be 0 or 1.\n", optarg);
+                    return -1;
+            }
         }
 
         else if (!my_strcmp(arg, "-f") || !my_strcmp(arg, "--file")) {
