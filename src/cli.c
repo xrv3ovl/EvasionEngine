@@ -161,11 +161,6 @@ int parse_cli(int argc, char **argv, CLI_OPTIONS *opts)
                     printf("[*] csTechnique = UNWIND_RAVEN\n");
                     break;
 
-                case 1:
-                    opts->ctx.csTechnique = LACUNA_CHAIN;
-                    printf("[*] csTechnique = LACUNA_CHAIN\n");
-                    break;
-
                 default:
                     fprintf(stderr, "[ERROR] Invalid cs-technique '%s'. Must be 0 or 1.\n", optarg);
                     return -1;
