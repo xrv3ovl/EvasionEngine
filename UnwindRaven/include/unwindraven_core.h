@@ -2,6 +2,7 @@
 #include "common.h"
 
 #include "engine.h"
+#include "synthetic_stack.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -6,28 +6,6 @@
 
 #include "unwindraven_integration.h"
 
-static DWORD WINAPI SpoofedInvokeThunk(LPVOID param)
-{
-    PINJECTION_CONTEXT ctx = (PINJECTION_CONTEXT)param;
-    DispatchInvoke(ctx);   // respects ctx->invokeFlavor
-    return 0;
-}
-
-BOOL EngineInvoke(PINJECTION_CONTEXT ctx)
-{
-    if (!ctx->spoofCallstack)
-        return DispatchInvoke(ctx);
-
-    switch (ctx->csTechnique)
-    {
-        case UNWIND_RAVEN:
-            return SpoofedInvoke_UnwindRaven(ctx);
-
-        default:
-            return DispatchInvoke(ctx);
-    }
-}
-
 BOOL DispatchAllocate(PINJECTION_CONTEXT ctx, DWORD protect)
 {
     switch (ctx->allocFlavor)
@@ -63,11 +41,22 @@ BOOL DispatchProtect(PINJECTION_CONTEXT ctx,
 }
 
 BOOL DispatchInvoke(PINJECTION_CONTEXT ctx) {
-    switch (ctx->invokeFlavor) {
-        case FLAVOR_WIN32:    return Win32Invoke(ctx);
-        case FLAVOR_DFR:      return DFRInvoke(ctx);
-        case FLAVOR_DIRECT:   return DirectInvoke(ctx);
-        case FLAVOR_INDIRECT: return IndirectInvoke(ctx);
-        default:              return Win32Invoke(ctx);
+    if (ctx->spoofCallstack) {
+        switch (ctx->csTechnique)
+        {
+            case UNWIND_RAVEN:
+                return Invoke_UnwindRaven(ctx);
+
+            default:
+                return Invoke_UnwindRaven(ctx);
+        }    
+    } else {
+        switch (ctx->invokeFlavor) {
+            case FLAVOR_WIN32:    return Win32Invoke(ctx);
+            case FLAVOR_DFR:      return DFRInvoke(ctx);
+            case FLAVOR_DIRECT:   return DirectInvoke(ctx);
+            case FLAVOR_INDIRECT: return IndirectInvoke(ctx);
+            default:              return Win32Invoke(ctx);
+        }
     }
 }

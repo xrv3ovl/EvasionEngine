@@ -164,9 +164,12 @@ The compiled binary is output to `build/Release/EvasionEngine.exe`.
 ## Usage
 
 ```
-EvasionEngine.exe [target] [--alloc-flavor N] [--write-flavor N]
-                  [--protect-flavor N] [--invoke-flavor N]
-                  [-t TECHNIQUE] [-m MODULE] [-e EXPORT] [-o OFFSET]
+EvasionEngine.exe [--alloc-flavor N] [--write-flavor N][--protect-flavor N] [--invoke-flavor N] 
+                  [--spawn PATH][--pid N]
+                  [-f PATH]
+                  [-t TECHNIQUE] 
+                  [-m MODULE] [-e EXPORT] [-o OFFSET]
+                  [--spoof-callstack]
 ```
 
 ### Flavor Values

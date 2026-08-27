@@ -37,7 +37,7 @@ BOOL DFRInvoke(PINJECTION_CONTEXT ctx)
 
 BOOL DirectInvoke(PINJECTION_CONTEXT ctx)
 {
-    printf("[*] Using direct syscalls to invoke tCreateThreadEx.\n");
+    printf("[*] Using direct syscalls to invoke NtCreateThreadEx.\n");
     NTSTATUS status = SysNtCreateThreadEx(&ctx->hThread,
                                           GENERIC_EXECUTE,
                                           NULL,
@@ -55,7 +55,7 @@ BOOL DirectInvoke(PINJECTION_CONTEXT ctx)
 
 BOOL IndirectInvoke(PINJECTION_CONTEXT ctx)
 {
-    printf("[*] Using indirect syscalls to invoke tCreateThreadEx.\n");
+    printf("[*] Using indirect syscalls to invoke NtCreateThreadEx.\n");
     NTSTATUS status = IndirectSysNtCreateThreadEx(&ctx->hThread,
                                                   GENERIC_EXECUTE,
                                                   NULL,

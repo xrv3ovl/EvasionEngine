@@ -28,22 +28,12 @@ int main(int argc, char *argv[]) {
     printf("  spoofCallstack = %s\n", opts.ctx.spoofCallstack ? "TRUE" : "FALSE");
     printf("  csTechnique    = %d\n", opts.ctx.csTechnique);
 
-    /*
     //  use default dispatch functions
     INJECTION_ENGINE engine = {
         .Allocate = DispatchAllocate,
         .Write    = DispatchWrite,
         .Protect  = DispatchProtect,
         .Invoke   = DispatchInvoke,
-    };
-    */
-
-    //  use default dispatch functions
-    INJECTION_ENGINE engine = {
-        .Allocate = DispatchAllocate,
-        .Write    = DispatchWrite,
-        .Protect  = DispatchProtect,
-        .Invoke   = EngineInvoke,
     };
 
     printf("--- Executing Process Injection ---\n");

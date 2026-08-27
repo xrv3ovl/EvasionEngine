@@ -1,6 +1,8 @@
+// 
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+
 #include "cli.h"
 #include "payload.h"
 #include "engine.h"
@@ -15,7 +17,7 @@ static SYSCALL_FLAVOR parse_flavor(const char *s)
         case 2: return FLAVOR_DIRECT;
         case 3: return FLAVOR_INDIRECT;
         default:
-            fprintf(stderr, "[ERROR] Invalid flavor '%s'. Must be 1-4.\n", s);
+            fprintf(stderr, "[ERROR] Invalid flavor '%s'. Must be 0-3.\n", s);
             exit(-1);
     }
 }
@@ -36,6 +38,7 @@ void print_usage(const char *app_name)
     printf("  -m, --module <name>            Module stomping target\n");
     printf("  -e, --export <name>            Export stomping target\n");
     printf("  -o, --offset <hex>             Offset for stomping\n");
+    printf("  --spoof-callstack              Enable callstack spoofing\n");
 }
 
 int parse_cli(int argc, char **argv, CLI_OPTIONS *opts)
