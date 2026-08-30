@@ -1,6 +1,9 @@
 #include "unwindraven_integration.h"
 #include "dispatch.h"
 #include "payload.h"
+
+#include "blueprint_library.h"
+
 #include <stdio.h>
 
 #define UR_MAX_BP_ENTRIES   64
@@ -9,15 +12,6 @@
 BOOL Invoke_UnwindRaven(PINJECTION_CONTEXT ctx)
 {
     printf("[DEBUG] Running Invoke_UnwindRaven\n");
-
-    StackProfileEntry blueprint[] = {
-        { L"C:\\Windows\\system32\\win32u.dll", "NtUserGetMessage", 0x14, FALSE, TRUE, 0 },
-        { L"C:\\Windows\\system32\\USER32.dll", "GetMessageW", 0x22, FALSE, TRUE, 0 },
-        { L"C:\\Windows\\system32\\KERNEL32.DLL", "BaseThreadInitThunk", 0x17, FALSE, TRUE, 0 },
-        { L"C:\\Windows\\system32\\ntdll.dll", "RtlUserThreadStart", 0x2C, FALSE, TRUE, 0 }
-    };    
-
-    int bpCount = sizeof(blueprint) / sizeof(blueprint[0]);
 
     UR_STACK_CONTEXT sctx = {0};
     StackFrame frames[UR_MAX_STACK_FRAMES];

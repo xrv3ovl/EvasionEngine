@@ -1,3 +1,6 @@
+#include <windows.h>
+#include <stdio.h>
+
 #include "masking_functions.h"
 
 /* ---------------- XOR ---------------- */
@@ -113,7 +116,7 @@ bool sub_unmask(uint8_t *buffer, size_t size, void *ctx)
 }
 
 mask_algo_t ADDSUB_ALGO = {
-    .name   = "add",
+    .name   = "addsub",
     .mask   = add_mask,
     .unmask = sub_unmask
 };

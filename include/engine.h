@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
+#include "maskit.h"
+
 #ifndef NtCurrentProcess
 #define NtCurrentProcess() ((HANDLE)(LONG_PTR)-1)
 #endif
@@ -55,6 +57,7 @@ typedef enum _CSTECHNIQUE {
 } CSTECHNIQUE;
 
 typedef struct _INJECTION_CONTEXT {
+    /*  core PI controls */
     BOOL   spawnTarget;
     char*  spawnPath;
     DWORD  targetPid;
@@ -64,18 +67,32 @@ typedef struct _INJECTION_CONTEXT {
     unsigned char*  payload;
     SIZE_T payloadSize;
 
-    // module stomping
+    /*  masking controls */
+    //  is the payload masked?
+    //  BOOL            unmaskPayload;
+    //  should we unmask before the write dispatch?
+    BOOL            unmaskForWrite;
+    //  pre-write unmask configuration
+    char*     unmaskWriteAlgo;
+    char*     unmaskWriteKey;
+    //  should we unmask before the invoke dispatch?
+    BOOL            unmaskForInvoke;
+    //  pre-invoke unmask configuration
+    char*     unmaskInvokeAlgo;
+    char*     unmaskInvokeKey;
+
+    /*  module stomping controls */
     BOOL   enableStomping;
     char*  targetModule;
     char*  targetExport;
     DWORD  targetOffset;
 
-    // tradecraft flags
+    /*  tradecraft flags */
     PITECHNIQUE technique;
     BOOL spoofCallstack;
     CSTECHNIQUE csTechnique;
 
-    // per-stage behavior controls
+    /* per-stage behavior controls */
     SYSCALL_FLAVOR allocFlavor;
     SYSCALL_FLAVOR writeFlavor;
     SYSCALL_FLAVOR protectFlavor;

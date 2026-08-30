@@ -40,8 +40,9 @@ bool mask_execute(mask_entry_t *entry)
 
 bool unmask_execute(mask_entry_t *entry)
 {
+    printf("[DEBUG] Running unmask_execute\n");
     if (!entry || !entry->algo || !entry->algo->unmask)
         return false;
-
+    printf("[DEBUG] Running unmask operation\n");
     return entry->algo->unmask(entry->buffer, entry->size, entry->ctx);
 }

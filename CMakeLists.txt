@@ -63,9 +63,17 @@ add_library(unwindraven_core STATIC
     UnwindRaven/src/synthetic_stack.c
     UnwindRaven/src/unwindraven_core.c
     UnwindRaven/src/veh.c
+    src/blueprint_library.c
 )
 
-target_include_directories(unwindraven_core PUBLIC UnwindRaven/include include)
+# target_include_directories(unwindraven_core PUBLIC UnwindRaven/include include)
+
+target_include_directories(unwindraven_core PUBLIC 
+    UnwindRaven/include 
+    include
+    MaskIt/include
+    HashIt/include
+)
 
 target_link_libraries(unwindraven_core PUBLIC
     dbghelp
@@ -84,7 +92,7 @@ add_executable(EvasionEngine
 target_link_libraries(EvasionEngine PRIVATE unwindraven_core)
 
 # Include paths
-target_include_directories(EvasionEngine PRIVATE include HashIt/include MaskIt/include UnwindRaven/include LacunaChain)
+target_include_directories(EvasionEngine PRIVATE include HashIt/include MaskIt/include UnwindRaven/include)
 
 # MSVC flags (C only)
 if(MSVC)

@@ -8,6 +8,8 @@
 #include "engine.h"
 #include "utils.h"
 
+#include "masking_functions.h"
+
 static SYSCALL_FLAVOR parse_flavor(const char *s)
 {
     int v = strtol(s, NULL, 0);
@@ -39,6 +41,12 @@ void print_usage(const char *app_name)
     printf("  -e, --export <name>            Export stomping target\n");
     printf("  -o, --offset <hex>             Offset for stomping\n");
     printf("  --spoof-callstack              Enable callstack spoofing\n");
+    printf("  --unmask-write                 Unmask payload before write dispatch (default: false)\n");
+    printf("  --unmask-write-algo            Algorithm to unmask the payload prior to the write stage (default: xor)\n");
+    printf("  --unmask-write-key             Key to unmask the payload prior to the write stage (default: 0x5A)\n");
+    printf("  --unmask-invoke                Unmask payload before the invoke dispatch (default: false)\n");
+    printf("  --unmask-invoke-algo           Algorithm to unmask the buffer prior to the invoke stage (default: xor)\n");
+    printf("  --unmask-invoke-key            Key to unmask the payload prior to the invoke stage (default: 0x5A)\n");
 }
 
 int parse_cli(int argc, char **argv, CLI_OPTIONS *opts)
@@ -54,6 +62,10 @@ int parse_cli(int argc, char **argv, CLI_OPTIONS *opts)
     // defaults
     opts->ctx.payloadSize = mockShellcodeSize;
     opts->ctx.technique   = DEFAULT;
+
+    //opts->ctx.unmaskPayload = FALSE;
+    opts->ctx.unmaskForWrite = FALSE;
+    opts->ctx.unmaskForInvoke = FALSE;
 
     // no callstack spoofing
     opts->spoofCallstack = FALSE;
@@ -151,6 +163,87 @@ int parse_cli(int argc, char **argv, CLI_OPTIONS *opts)
         else if (!my_strcmp(arg, "--spoof-callstack")) {
             opts->ctx.spoofCallstack = TRUE;
             printf("[*] spoofCallstack = TRUE\n");
+        }
+
+        else if (!my_strcmp(arg, "--unmask-write")) {
+            opts->ctx.unmaskForWrite = TRUE;
+            printf("[*] unmaskForWrite = TRUE\n");
+        }
+
+        else if (!my_strcmp(arg, "--unmask-write-algo")) {
+            FETCH_OPTARG();
+
+            int algo = strtol(optarg, NULL, 0);
+            switch(algo){
+                case 0:
+                    opts->ctx.unmaskWriteAlgo = "xor";
+                    break;
+                case 1:
+                    opts->ctx.unmaskWriteAlgo = "rot";
+                    break;
+                case 2:
+                    opts->ctx.unmaskWriteAlgo = "not";
+                    break;
+                case 3:
+                    opts->ctx.unmaskWriteAlgo = "rol";
+                    break;
+                case 4:
+                    opts->ctx.unmaskWriteAlgo = "addsub";
+                    break;
+                default:
+                    opts->ctx.unmaskWriteAlgo = "xor";
+                    break;
+            }
+            printf("[*] unmaskForWrite = TRUE\n");
+            // an algorithm was specified, to let's make sure the unmaskForWrite flag is also set
+            opts->ctx.unmaskForWrite = TRUE;            
+        }
+
+        else if (!my_strcmp(arg, "--unmask-write-key")) {
+            FETCH_OPTARG();
+            opts->ctx.unmaskWriteKey = optarg;
+            printf("[*] unmaskWriteKey = %s\n", optarg);
+        }
+
+        else if (!my_strcmp(arg, "--unmask-invoke")) {
+            opts->ctx.unmaskForInvoke = TRUE;
+            printf("[*] unmaskForInvoke = TRUE\n");
+        }
+
+        else if (!my_strcmp(arg, "--unmask-invoke-algo")) {
+            FETCH_OPTARG();
+
+            int algo = strtol(optarg, NULL, 0);
+            switch(algo){
+                case 0:
+                    opts->ctx.unmaskInvokeAlgo = "xor";
+                    break;
+                case 1:
+                    opts->ctx.unmaskInvokeAlgo = "rot";
+                    break;
+                case 2:
+                    opts->ctx.unmaskInvokeAlgo = "not";
+                    break;
+                case 3:
+                    opts->ctx.unmaskInvokeAlgo = "rol";
+                    break;
+                case 4:
+                    opts->ctx.unmaskInvokeAlgo = "addsub";
+                    break;
+                default:
+                    opts->ctx.unmaskInvokeAlgo = "xor";
+                    break;
+            }
+            // an algorithm was specified, to let's make sure the unmaskForInvoke flag is also set
+            opts->ctx.unmaskForInvoke = TRUE;
+            printf("[*] unmaskForInvoke = TRUE\n");
+            //printf("[*] unmaskInvokeAlgo = %p\n", opts->ctx.unmaskInvokeAlgo);
+        }
+
+        else if (!my_strcmp(arg, "--unmask-invoke-key")) {
+            FETCH_OPTARG();
+            opts->ctx.unmaskInvokeKey = optarg;
+            printf("[*] unmaskInvokeKey = %s\n", optarg);
         }
 
         else if (!my_strcmp(arg, "--cs-technique")) {

@@ -28,6 +28,10 @@ int main(int argc, char *argv[]) {
     printf("  spoofCallstack = %s\n", opts.ctx.spoofCallstack ? "TRUE" : "FALSE");
     printf("  csTechnique    = %d\n", opts.ctx.csTechnique);
 
+    //printf("  isPayloadMasked = %s\n", opts.ctx.unmaskPayload ? "TRUE" : "FALSE");
+    printf("  unmaskForWrite  = %s\n", opts.ctx.unmaskForWrite ? "TRUE" : "FALSE");
+    printf("  unmaskForInvoke = %s\n", opts.ctx.unmaskForInvoke ? "TRUE" : "FALSE");
+
     //  use default dispatch functions
     INJECTION_ENGINE engine = {
         .Allocate = DispatchAllocate,

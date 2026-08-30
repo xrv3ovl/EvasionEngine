@@ -14,6 +14,12 @@ typedef struct _CLI_OPTIONS {
 
     BOOL spoofCallstack;
     CSTECHNIQUE csTechnique;
+
+    //BOOL unmaskPayload;
+    BOOL unmaskForWrite;
+    char* unmaskAlgoWrite;    
+    BOOL unmaskForInvoke;
+    char* unmaskAlgoInvoke;
 } CLI_OPTIONS;
 
 void print_usage(const char *app_name);

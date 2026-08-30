@@ -23,4 +23,4 @@ extern mask_algo_t ROL_ALGO;
 // ADDSUB
 bool add_mask(uint8_t *buffer, size_t size, void *ctx);
 bool sub_unmask(uint8_t *buffer, size_t size, void *ctx);
-extern mask_algo_t ADD_ALGO;
+extern mask_algo_t ADDSUB_ALGO;
