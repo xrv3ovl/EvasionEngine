@@ -24,6 +24,14 @@ static SYSCALL_FLAVOR parse_flavor(const char *s)
     }
 }
 
+static uint8_t parse_key(const char *s)
+{
+    if (strncmp(s, "0x", 2) == 0 || strncmp(s, "0X", 2) == 0)
+        return (uint8_t)strtoul(s + 2, NULL, 16);
+
+    return (uint8_t)strtoul(s, NULL, 10);
+}
+
 void print_usage(const char *app_name)
 {
     printf("Usage: %s [options]\n", app_name);
@@ -201,7 +209,7 @@ int parse_cli(int argc, char **argv, CLI_OPTIONS *opts)
 
         else if (!my_strcmp(arg, "--unmask-write-key")) {
             FETCH_OPTARG();
-            opts->ctx.unmaskWriteKey = optarg;
+            opts->ctx.unmaskWriteKey = parse_key(optarg);
             printf("[*] unmaskWriteKey = %s\n", optarg);
         }
 
@@ -242,7 +250,7 @@ int parse_cli(int argc, char **argv, CLI_OPTIONS *opts)
 
         else if (!my_strcmp(arg, "--unmask-invoke-key")) {
             FETCH_OPTARG();
-            opts->ctx.unmaskInvokeKey = optarg;
+            opts->ctx.unmaskInvokeKey = parse_key(optarg);
             printf("[*] unmaskInvokeKey = %s\n", optarg);
         }
 

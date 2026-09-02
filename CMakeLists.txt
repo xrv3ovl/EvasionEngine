@@ -35,10 +35,6 @@ set(PROJECT_SOURCES
     src/EvasionEngine.c
     src/hash_loader.c
     src/hashed_values.c
-    HashIt/src/hashit.c
-    HashIt/src/hash_functions.c
-    MaskIt/src/maskit.c
-    MaskIt/src/masking_functions.c
     src/unwindraven_integration.c
 )
 
@@ -68,6 +64,19 @@ add_library(unwindraven_core STATIC
 
 # target_include_directories(unwindraven_core PUBLIC UnwindRaven/include include)
 
+# Define pre-compiled imported library
+add_library(HashIt STATIC IMPORTED GLOBAL)
+set_target_properties(HashIt PROPERTIES
+    IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/HashIt/HashIt.lib"
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/HashIt/include"
+)
+
+add_library(MaskIt STATIC IMPORTED GLOBAL)
+set_target_properties(MaskIt PROPERTIES
+    IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/MaskIt/MaskIt.lib"
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/MaskIt/include"
+)
+
 target_include_directories(unwindraven_core PUBLIC 
     UnwindRaven/include 
     include
@@ -76,6 +85,7 @@ target_include_directories(unwindraven_core PUBLIC
 )
 
 target_link_libraries(unwindraven_core PUBLIC
+    HashIt
     dbghelp
     psapi
     advapi32
@@ -89,7 +99,7 @@ add_executable(EvasionEngine
     $<$<BOOL:${IS_X64}>:${ASM_SOURCES}>
 )
 
-target_link_libraries(EvasionEngine PRIVATE unwindraven_core)
+target_link_libraries(EvasionEngine PRIVATE HashIt MaskIt unwindraven_core)
 
 # Include paths
 target_include_directories(EvasionEngine PRIVATE include HashIt/include MaskIt/include UnwindRaven/include)

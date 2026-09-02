@@ -14,8 +14,8 @@ typedef struct mask_algo {
 typedef struct mask_entry {
     uint8_t     *buffer;
     size_t       size;
-    mask_algo_t *algo;
     void        *ctx;
+    mask_algo_t *algo;    
 } mask_entry_t;
 
 /* Dispatcher */

@@ -71,15 +71,15 @@ typedef struct _INJECTION_CONTEXT {
     //  is the payload masked?
     //  BOOL            unmaskPayload;
     //  should we unmask before the write dispatch?
-    BOOL            unmaskForWrite;
+    BOOL      unmaskForWrite;
     //  pre-write unmask configuration
     char*     unmaskWriteAlgo;
-    char*     unmaskWriteKey;
+    uint8_t   unmaskWriteKey;
     //  should we unmask before the invoke dispatch?
-    BOOL            unmaskForInvoke;
+    BOOL      unmaskForInvoke;
     //  pre-invoke unmask configuration
     char*     unmaskInvokeAlgo;
-    char*     unmaskInvokeKey;
+    uint8_t   unmaskInvokeKey;
 
     /*  module stomping controls */
     BOOL   enableStomping;
